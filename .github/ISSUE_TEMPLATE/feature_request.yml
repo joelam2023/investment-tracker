@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest an improvement without sharing real financial data.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        You may write this request in any language.
+
+        Describe the idea with synthetic examples. Do not upload real ledger files, exports, recovery keys, passwords, account names, balances, transaction dates, or unredacted screenshots.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What would you like to accomplish?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested solution
+      description: Describe the behavior or workflow you would find useful.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered (optional)
+      description: Share any current workaround or alternative design you considered.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I removed all real financial data, credentials, and identifying screenshots.
+          required: true

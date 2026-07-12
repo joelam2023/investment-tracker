@@ -1,0 +1,42 @@
+# Dependencies and generated output
+node_modules/
+dist/
+test-dist/
+main.js
+*.map
+
+# Obsidian and local editor state
+.obsidian/
+.vscode/
+.idea/
+*.iml
+.DS_Store
+
+# Investment Tracker user data — never publish
+data.json
+ledger-meta.json
+events/
+market-cache/
+exports/
+backups/
+
+# Credentials and local environment
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Financial files and private screenshots
+*.csv
+*.tsv
+*.xls
+*.xlsx
+*.xlsm
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.pdf

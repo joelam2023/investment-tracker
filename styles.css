@@ -1,0 +1,1018 @@
+.investment-tracker-view {
+  --it-positive: var(--color-green);
+  --it-negative: var(--color-red);
+  --it-accent-soft: color-mix(in srgb, var(--interactive-accent) 14%, transparent);
+  height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: 24px clamp(16px, 4vw, 42px) 0;
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.investment-tracker-lock-screen {
+  width: min(520px, calc(100% - 32px));
+  margin: clamp(48px, 12vh, 120px) auto;
+  padding: 32px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 20px;
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  text-align: center;
+}
+
+.investment-tracker-lock-screen h1,
+.investment-tracker-lock-screen p {
+  margin: 0;
+}
+
+.investment-tracker-lock-screen p {
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.investment-tracker-lock-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 4px;
+  padding: 13px;
+  border-radius: 16px;
+  color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+}
+
+.investment-tracker-lock-input {
+  width: 100%;
+  min-height: 42px;
+  font-size: 16px;
+}
+
+.investment-tracker-lock-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text-muted);
+  text-align: left;
+  font-size: var(--font-ui-small);
+}
+
+.investment-tracker-lock-confirm input {
+  margin-top: 3px;
+}
+
+.investment-tracker-recovery-key {
+  display: block;
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+  overflow-wrap: anywhere;
+  user-select: all;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.investment-tracker-shell {
+  width: min(1080px, 100%);
+  margin: 0 auto;
+  padding-bottom: calc(192px + env(safe-area-inset-bottom));
+}
+
+.investment-tracker-header,
+.investment-tracker-section-header,
+.investment-tracker-account-header,
+.investment-tracker-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.investment-tracker-eyebrow {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.investment-tracker-title {
+  margin: 3px 0 0;
+  font-size: clamp(24px, 4vw, 34px);
+  letter-spacing: -0.03em;
+}
+
+.investment-tracker-primary-button {
+  min-height: 38px;
+  padding: 0 16px;
+}
+
+.investment-tracker-summary {
+  margin-top: 24px;
+  padding: clamp(18px, 3vw, 28px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 90% 0%, var(--it-accent-soft), transparent 42%),
+    var(--background-secondary);
+  box-shadow: var(--shadow-s);
+}
+
+.investment-tracker-summary-total-label,
+.investment-tracker-metric-label,
+.investment-tracker-metric-hint,
+.investment-tracker-account-meta,
+.investment-tracker-history-meta,
+.investment-tracker-modal-intro {
+  color: var(--text-muted);
+}
+
+.investment-tracker-summary-total {
+  margin-top: 6px;
+  font-size: clamp(20px, 3.5vw, 28px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.investment-tracker-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.investment-tracker-metric {
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--background-primary) 78%, transparent);
+}
+
+.investment-tracker-metric-value {
+  margin-top: 5px;
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.investment-tracker-metric.is-positive .investment-tracker-metric-value,
+.investment-tracker-positive {
+  color: var(--it-positive);
+}
+
+.investment-tracker-metric.is-negative .investment-tracker-metric-value,
+.investment-tracker-negative {
+  color: var(--it-negative);
+}
+
+.investment-tracker-metric-hint {
+  margin-top: 4px;
+  font-size: var(--font-ui-smaller);
+}
+
+.investment-tracker-section {
+  margin-top: 30px;
+}
+
+.investment-tracker-section h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.investment-tracker-currency-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.investment-tracker-currency-tab {
+  min-height: 30px;
+  padding: 2px 10px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 650;
+}
+
+.investment-tracker-currency-tab.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.investment-tracker-annual-table {
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  background: var(--background-secondary);
+}
+
+.investment-tracker-annual-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 0.7fr) minmax(110px, 0.9fr) minmax(250px, 2fr) minmax(120px, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 58px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.investment-tracker-annual-row.is-header {
+  min-height: 42px;
+  border-top: 0;
+  background: color-mix(in srgb, var(--background-primary) 55%, transparent);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+}
+
+.investment-tracker-annual-year {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.investment-tracker-annual-rate {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.investment-tracker-annual-rate {
+  font-size: 15px;
+}
+
+.investment-tracker-annual-range {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.investment-tracker-annual-detail {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.investment-tracker-annual-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 650;
+}
+
+.investment-tracker-annual-status-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.investment-tracker-annual-status.is-complete,
+.investment-tracker-annual-status.is-mtd,
+.investment-tracker-annual-status.is-ytd {
+  background: var(--it-accent-soft);
+  color: var(--text-accent);
+}
+
+.investment-tracker-annual-status.is-estimated {
+  background: color-mix(in srgb, var(--color-orange) 14%, var(--background-secondary));
+  color: var(--color-orange);
+}
+
+.investment-tracker-annual-status.is-partial,
+.investment-tracker-annual-status.is-insufficient,
+.investment-tracker-annual-status.is-missing {
+  color: var(--text-faint);
+}
+
+.investment-tracker-opening-action {
+  padding: 2px 4px;
+  font-size: var(--font-ui-smaller);
+}
+
+.investment-tracker-opening-reminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--color-orange) 42%, var(--background-modifier-border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-orange) 8%, var(--background-secondary));
+}
+
+.investment-tracker-opening-reminder-title {
+  margin-bottom: 3px;
+  font-weight: 700;
+}
+
+.investment-tracker-opening-reminder-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.investment-tracker-annual-empty {
+  margin-top: 12px;
+  padding: 22px;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 14px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.investment-tracker-performance-header {
+  align-items: flex-start;
+}
+
+.investment-tracker-performance-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.investment-tracker-performance-option-group {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.investment-tracker-performance-option {
+  min-height: 30px;
+  padding: 2px 10px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 650;
+}
+
+.investment-tracker-performance-option.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.investment-tracker-performance-chart {
+  margin-top: 12px;
+}
+
+.investment-tracker-performance-chart-wrap {
+  position: relative;
+  padding: 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  background: var(--background-secondary);
+}
+
+.investment-tracker-chart-axis-label {
+  fill: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.investment-tracker-chart-point {
+  stroke-width: 2;
+  fill: var(--background-secondary);
+}
+
+.investment-tracker-chart-point.is-actual {
+  stroke: var(--interactive-accent);
+}
+
+.investment-tracker-chart-point.is-benchmark {
+  stroke: var(--text-muted);
+}
+
+.investment-tracker-chart-line.is-contributions,
+.investment-tracker-chart-point.is-contributions,
+.investment-tracker-chart-dot.is-contributions {
+  stroke: var(--color-blue);
+  background: var(--color-blue);
+  stroke-dasharray: 4 5;
+}
+
+.investment-tracker-chart-line.is-hidden,
+.investment-tracker-chart-point.is-hidden {
+  display: none;
+}
+
+.investment-tracker-flow-marker {
+  stroke: var(--background-secondary);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+.investment-tracker-flow-marker.is-in {
+  fill: var(--color-green);
+}
+
+.investment-tracker-flow-marker.is-out {
+  fill: var(--color-red);
+}
+
+.investment-tracker-flow-marker-hit {
+  cursor: help;
+  fill: transparent;
+  pointer-events: all;
+  stroke: none;
+}
+
+[data-flow-marker-index]:focus-visible .investment-tracker-flow-marker {
+  stroke: var(--text-normal);
+  stroke-width: 3;
+}
+
+.investment-tracker-flow-legend-symbol {
+  display: inline-block;
+  width: 11px;
+  height: 10px;
+  flex: 0 0 auto;
+}
+
+.investment-tracker-flow-legend-symbol.is-in {
+  background: var(--color-green);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.investment-tracker-flow-legend-symbol.is-out {
+  background: var(--color-red);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+.investment-tracker-chart-crosshair {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.investment-tracker-chart-tooltip {
+  position: absolute;
+  z-index: 2;
+  top: 28px;
+  width: max-content;
+  max-width: 240px;
+  padding: 9px 11px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 9px;
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
+  font-size: var(--font-ui-smaller);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.investment-tracker-chart-tooltip-date {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-weight: 650;
+}
+
+.investment-tracker-chart-tooltip-flow {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--background-modifier-border);
+  font-weight: 600;
+}
+
+.investment-tracker-chart-tooltip-flow.is-in {
+  color: var(--color-green);
+}
+
+.investment-tracker-chart-tooltip-flow.is-out {
+  color: var(--color-red);
+}
+
+.investment-tracker-chart-legend-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 7px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.investment-tracker-chart-legend-button[aria-pressed="false"] {
+  opacity: 0.45;
+}
+
+.investment-tracker-monthly-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.investment-tracker-monthly-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.investment-tracker-monthly-table {
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  background: var(--background-secondary);
+}
+
+.investment-tracker-monthly-item {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.investment-tracker-monthly-row {
+  display: grid;
+  grid-template-columns: 68px minmax(86px, 1.15fr) minmax(72px, 0.9fr) minmax(70px, 0.8fr) minmax(82px, 0.9fr) 82px;
+  align-items: center;
+  gap: 7px;
+  min-height: 54px;
+  padding: 9px 10px;
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+
+.investment-tracker-monthly-row.is-header {
+  min-height: 40px;
+  background: color-mix(in srgb, var(--background-primary) 55%, transparent);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+}
+
+.investment-tracker-month-cell {
+  font-weight: 700;
+}
+
+.investment-tracker-monthly-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+}
+
+.investment-tracker-monthly-comparison > :last-child {
+  margin-top: 2px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.investment-tracker-monthly-expand {
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+}
+
+.investment-tracker-monthly-details {
+  padding: 13px 16px 16px;
+  background: color-mix(in srgb, var(--background-primary) 55%, transparent);
+}
+
+.investment-tracker-monthly-detail-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.investment-tracker-monthly-event-list {
+  margin-top: 10px;
+}
+
+.investment-tracker-monthly-event {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--background-modifier-border);
+  font-size: var(--font-ui-small);
+}
+
+.investment-tracker-monthly-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.investment-tracker-load-more {
+  display: block;
+  margin: 12px auto 0;
+}
+
+.investment-tracker-accounts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.investment-tracker-account-card {
+  padding: 18px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  background: var(--background-secondary);
+  cursor: pointer;
+  transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+
+.investment-tracker-account-card:hover,
+.investment-tracker-account-card:focus-visible {
+  border-color: var(--interactive-accent);
+  box-shadow: var(--shadow-s);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.investment-tracker-account-name {
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.investment-tracker-account-value {
+  margin-top: 18px;
+  font-size: 16px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.investment-tracker-account-footer,
+.investment-tracker-history-actions,
+.investment-tracker-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.investment-tracker-account-footer {
+  justify-content: space-between;
+  margin-top: 14px;
+}
+
+.investment-tracker-link-button {
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-accent);
+  box-shadow: none;
+}
+
+.investment-tracker-link-button:hover {
+  background: var(--background-modifier-hover);
+}
+
+.investment-tracker-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.investment-tracker-privacy-toggle {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
+}
+
+.investment-tracker-privacy-toggle[aria-pressed="false"] {
+  color: var(--text-muted);
+}
+
+.investment-tracker-empty {
+  margin-top: 24px;
+  padding: 42px 24px;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 16px;
+  text-align: center;
+}
+
+.investment-tracker-empty h2 {
+  margin: 10px 0 6px;
+}
+
+.investment-tracker-empty p {
+  max-width: 440px;
+  margin: 0 auto 18px;
+  color: var(--text-muted);
+}
+
+.investment-tracker-chart-wrap {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  background: var(--background-secondary);
+}
+
+.investment-tracker-chart {
+  display: block;
+  width: 100%;
+  min-height: 190px;
+}
+
+.investment-tracker-chart-grid {
+  stroke: var(--background-modifier-border);
+  stroke-width: 1;
+}
+
+.investment-tracker-chart-grid.is-zero {
+  stroke: var(--text-muted);
+  stroke-width: 1.6;
+}
+
+.investment-tracker-chart-line {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.investment-tracker-chart-line.is-actual,
+.investment-tracker-chart-dot.is-actual {
+  stroke: var(--interactive-accent);
+  background: var(--interactive-accent);
+}
+
+.investment-tracker-chart-line.is-benchmark,
+.investment-tracker-chart-dot.is-benchmark {
+  stroke: var(--text-muted);
+  background: var(--text-muted);
+  stroke-dasharray: 8 8;
+}
+
+.investment-tracker-chart-legend {
+  display: flex;
+  gap: 18px;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.investment-tracker-chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.investment-tracker-chart-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.investment-tracker-empty-chart {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 14px;
+  color: var(--text-muted);
+}
+
+.investment-tracker-warning-list {
+  margin-top: 14px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--color-orange) 44%, var(--background-modifier-border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-orange) 8%, var(--background-secondary));
+  color: var(--text-normal);
+}
+
+.investment-tracker-warning-list ul {
+  margin: 6px 0 0;
+  padding-inline-start: 20px;
+}
+
+.investment-tracker-history {
+  margin-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.investment-tracker-history-header-actions,
+.investment-tracker-history-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.investment-tracker-history-toggle {
+  min-height: 34px;
+  padding: 4px 10px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  box-shadow: none;
+  font-size: var(--font-ui-small);
+}
+
+.investment-tracker-history-toggle:hover {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}
+
+.investment-tracker-history-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.investment-tracker-history-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.investment-tracker-history-value {
+  font-size: var(--font-ui-small);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.investment-tracker-modal {
+  padding-bottom: max(18px, env(safe-area-inset-bottom));
+}
+
+.investment-tracker-modal h2 {
+  margin-bottom: 8px;
+}
+
+.investment-tracker-modal-intro {
+  margin-top: 0;
+  line-height: 1.55;
+}
+
+.investment-tracker-modal-actions {
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.investment-tracker-import-textarea {
+  width: 100%;
+  min-height: 260px;
+  resize: vertical;
+  font-family: var(--font-monospace);
+}
+
+.investment-tracker-setting-note {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+  .investment-tracker-opening-reminder {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .investment-tracker-view {
+    padding: 16px 12px 0;
+  }
+
+  .investment-tracker-shell {
+    padding-bottom: calc(160px + env(safe-area-inset-bottom));
+  }
+
+  .investment-tracker-header {
+    align-items: flex-start;
+  }
+
+  .investment-tracker-primary-button .investment-tracker-button-label {
+    display: none;
+  }
+
+  .investment-tracker-metrics-grid,
+  .investment-tracker-accounts {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .investment-tracker-metric {
+    padding: 11px;
+  }
+
+  .investment-tracker-history-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .investment-tracker-annual-row {
+    grid-template-columns: 64px minmax(96px, 0.8fr) minmax(0, 1.5fr) minmax(92px, 0.8fr);
+    gap: 9px;
+    padding: 10px 11px;
+  }
+
+  .investment-tracker-annual-range {
+    font-size: var(--font-ui-smaller);
+  }
+
+  .investment-tracker-history-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .investment-tracker-history-header-actions {
+    gap: 6px;
+  }
+
+  .investment-tracker-performance-controls {
+    gap: 6px;
+  }
+
+  .investment-tracker-performance-option {
+    padding-inline: 8px;
+  }
+
+  .investment-tracker-performance-chart-wrap {
+    padding: 8px;
+  }
+
+  .investment-tracker-monthly-header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .investment-tracker-monthly-row {
+    grid-template-columns: 62px minmax(82px, 1.1fr) minmax(68px, 0.8fr) minmax(66px, 0.75fr) minmax(78px, 0.8fr) 76px;
+    gap: 5px;
+    padding-inline: 8px;
+  }
+}
+
+@media (max-width: 420px) {
+  .investment-tracker-metrics-grid,
+  .investment-tracker-accounts {
+    grid-template-columns: 1fr;
+  }
+
+  .investment-tracker-modal .setting-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .investment-tracker-modal .setting-item-control,
+  .investment-tracker-modal input,
+  .investment-tracker-modal textarea,
+  .investment-tracker-modal select {
+    width: 100%;
+  }
+
+  .investment-tracker-annual-section .investment-tracker-section-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .investment-tracker-annual-row {
+    grid-template-columns: 58px minmax(90px, 1fr) 68px;
+  }
+
+  .investment-tracker-annual-row > :nth-child(3) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .investment-tracker-annual-row.is-header > :nth-child(3) {
+    display: none;
+  }
+
+  .investment-tracker-monthly-table {
+    overflow-x: auto;
+  }
+
+  .investment-tracker-monthly-row,
+  .investment-tracker-monthly-item {
+    min-width: 520px;
+  }
+}

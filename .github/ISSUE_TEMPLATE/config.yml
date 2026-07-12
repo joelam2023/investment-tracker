@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security report
+    url: https://github.com/joelam2023/investment-tracker/security/advisories/new
+    about: Privately report vulnerabilities involving financial data, privacy, passwords, or encryption.

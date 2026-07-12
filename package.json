@@ -1,0 +1,27 @@
+{
+  "name": "investment-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "author": "Lam",
+  "type": "module",
+  "description": "Account-level investment return tracking for Obsidian.",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "build:release": "node esbuild.config.mjs --release",
+    "typecheck": "tsc --noEmit",
+    "i18n:check": "node scripts/check-i18n.mjs",
+    "test:build": "node test-build.mjs",
+    "test": "npm run test:build && node --test test-dist/*.test.js",
+    "check": "npm run typecheck && npm run i18n:check && npm run build && npm test",
+    "privacy:check": "node scripts/privacy-check.mjs",
+    "release:check": "npm run check && npm run build:release && npm run privacy:check",
+    "version": "node scripts/version-bump.mjs && git add manifest.json versions.json"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "^1.12.7",
+    "typescript": "^5.8.0"
+  }
+}
