@@ -168,7 +168,6 @@ export default class InvestmentTrackerPlugin extends Plugin {
     this.store?.lock();
     window.dispatchEvent(new Event(PRIVACY_MASK_EVENT));
     window.dispatchEvent(new Event("investment-tracker-lock"));
-    this.app.workspace.detachLeavesOfType(INVESTMENT_TRACKER_VIEW);
   }
 
   async activateView(): Promise<void> {

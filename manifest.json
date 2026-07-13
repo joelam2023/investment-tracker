@@ -1,7 +1,7 @@
 {
   "id": "investment-tracker",
   "name": "Investment Tracker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minAppVersion": "1.12.7",
   "description": "Track encrypted investment cash flows, valuations, annualized returns, and benchmark performance.",
   "author": "Lam",

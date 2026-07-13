@@ -465,13 +465,19 @@
 }
 
 .investment-tracker-chart-crosshair {
+  display: none;
   stroke: var(--text-faint);
   stroke-width: 1;
   stroke-dasharray: 4 4;
   pointer-events: none;
 }
 
+.investment-tracker-chart-crosshair.is-visible {
+  display: block;
+}
+
 .investment-tracker-chart-tooltip {
+  display: none;
   position: absolute;
   z-index: 2;
   top: 28px;
@@ -485,6 +491,10 @@
   font-size: var(--font-ui-smaller);
   pointer-events: none;
   transform: translateX(-50%);
+}
+
+.investment-tracker-chart-tooltip.is-visible {
+  display: block;
 }
 
 .investment-tracker-chart-tooltip-date {

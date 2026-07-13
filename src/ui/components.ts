@@ -325,17 +325,15 @@ export function renderPerformanceChart(
   crosshair.setAttribute("y1", String(padTop));
   crosshair.setAttribute("y2", String(height - padBottom));
   crosshair.setAttribute("class", "investment-tracker-chart-crosshair");
-  crosshair.style.display = "none";
   svg.appendChild(crosshair);
   const tooltip = wrap.createDiv({ cls: "investment-tracker-chart-tooltip" });
-  tooltip.style.display = "none";
   const positionTooltip = (date: string) => {
     const rect = svg.getBoundingClientRect();
     const x = xForDate(date);
     crosshair.setAttribute("x1", String(x));
     crosshair.setAttribute("x2", String(x));
-    crosshair.style.display = "block";
-    tooltip.style.display = "block";
+    crosshair.classList.add("is-visible");
+    tooltip.classList.add("is-visible");
     const pixelX = (x / width) * rect.width;
     tooltip.style.left = `${Math.min(Math.max(pixelX, 90), Math.max(rect.width - 120, 90))}px`;
   };
@@ -384,14 +382,14 @@ export function renderPerformanceChart(
     positionTooltip(nearest);
   });
   svg.addEventListener("pointerleave", () => {
-    crosshair.style.display = "none";
-    tooltip.style.display = "none";
+    crosshair.classList.remove("is-visible");
+    tooltip.classList.remove("is-visible");
   });
   for (const { group, marker } of markerGroups) {
     group.addEventListener("focus", () => showFlowTooltip(marker));
     group.addEventListener("blur", () => {
-      crosshair.style.display = "none";
-      tooltip.style.display = "none";
+      crosshair.classList.remove("is-visible");
+      tooltip.classList.remove("is-visible");
     });
     group.addEventListener("click", (event) => {
       event.stopPropagation();

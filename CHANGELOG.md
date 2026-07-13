@@ -2,6 +2,11 @@
 
 All notable changes to Investment Tracker are documented here.
 
+## 1.0.1
+
+- Preserved the Investment Tracker leaf location when the plugin unloads.
+- Replaced static inline chart visibility styles with CSS state classes for Obsidian marketplace compatibility.
+
 ## 1.0.0
 
 - Prepared the first public release.
