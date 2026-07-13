@@ -138,6 +138,63 @@
   font-variant-numeric: tabular-nums;
 }
 
+.investment-tracker-currency-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.investment-tracker-currency-summary {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 14px;
+  background: var(--background-secondary);
+}
+
+.investment-tracker-currency-summary .investment-tracker-metrics-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.investment-tracker-fx-breakdown {
+  margin-top: 18px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.investment-tracker-fx-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.investment-tracker-fx-row-main,
+.investment-tracker-fx-source,
+.investment-tracker-fx-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.investment-tracker-fx-row-main {
+  font-weight: 550;
+}
+
+.investment-tracker-fx-row .investment-tracker-account-meta {
+  margin-top: 4px;
+  font-size: var(--font-ui-smaller);
+}
+
+.investment-tracker-fx-source,
+.investment-tracker-fx-actions {
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.investment-tracker-fx-actions {
+  justify-content: flex-start;
+}
+
 .investment-tracker-metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -654,6 +711,21 @@
   outline: none;
 }
 
+.investment-tracker-archived-account {
+  cursor: default;
+  opacity: 0.82;
+}
+
+.investment-tracker-archived-account:hover {
+  border-color: var(--background-modifier-border);
+  box-shadow: none;
+  transform: none;
+}
+
+.investment-tracker-archived-account .investment-tracker-link-button {
+  margin-top: 14px;
+}
+
 .investment-tracker-account-name {
   font-size: 16px;
   font-weight: 650;
@@ -893,6 +965,10 @@
 }
 
 @media (max-width: 720px) {
+  .investment-tracker-currency-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
   .investment-tracker-opening-reminder {
     align-items: flex-start;
     flex-direction: column;
@@ -975,6 +1051,15 @@
   .investment-tracker-metrics-grid,
   .investment-tracker-accounts {
     grid-template-columns: 1fr;
+  }
+
+  .investment-tracker-currency-summary .investment-tracker-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .investment-tracker-fx-row-main {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .investment-tracker-modal .setting-item {
