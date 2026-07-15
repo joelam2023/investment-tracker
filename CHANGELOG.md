@@ -2,6 +2,12 @@
 
 All notable changes to Investment Tracker are documented here.
 
+## 1.0.3
+
+- Added complete public documentation for all nine supported interface languages: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, Spanish, German, French, and Brazilian Portuguese.
+- Added nine-language navigation to every localized README.
+- Made no changes to plugin behavior, ledger storage, encryption, calculations, network requests, or data formats. This release contains no personal or portfolio data.
+
 ## 1.0.2
 
 - Reframed the public description around private, local-first portfolio tracking with encrypted records stored in the user's Obsidian Vault.
