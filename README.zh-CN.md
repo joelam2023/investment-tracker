@@ -1,6 +1,6 @@
 # Investment Tracker：Obsidian 本地优先的加密投资管理插件
 
-[English README](https://github.com/joelam2023/investment-tracker/blob/main/README.md)
+[English](https://github.com/joelam2023/investment-tracker/blob/main/README.md) | 简体中文 | [繁體中文](https://github.com/joelam2023/investment-tracker/blob/main/README.zh-TW.md) | [日本語](https://github.com/joelam2023/investment-tracker/blob/main/README.ja.md) | [한국어](https://github.com/joelam2023/investment-tracker/blob/main/README.ko.md) | [Español](https://github.com/joelam2023/investment-tracker/blob/main/README.es.md) | [Deutsch](https://github.com/joelam2023/investment-tracker/blob/main/README.de.md) | [Français](https://github.com/joelam2023/investment-tracker/blob/main/README.fr.md) | [Português (Brasil)](https://github.com/joelam2023/investment-tracker/blob/main/README.pt-BR.md)
 
 **你的投资数据，保存在你自己的 Obsidian Vault。**
 
