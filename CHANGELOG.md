@@ -2,6 +2,15 @@
 
 All notable changes to Investment Tracker are documented here.
 
+## 1.0.2
+
+- Reframed the public description around private, local-first portfolio tracking with encrypted records stored in the user's Obsidian Vault.
+- Added a privacy facts table, clearer installation guidance, intended-use boundaries, and direct-answer privacy FAQs to the English README.
+- Added a Simplified Chinese README covering installation, features, privacy, network use, synchronization, exports, and threat boundaries.
+- Expanded the privacy and security documentation with precise encryption parameters, FRED request scope, user-selected Vault synchronization, clipboard and plaintext-export risks, visible filesystem metadata, and the supported threat model.
+- Updated repository metadata and corrected documentation links for the Obsidian Community directory renderer.
+- Made no changes to ledger data, storage formats, investment calculations, or migration behavior. This release contains no personal or portfolio data.
+
 ## 1.0.1
 
 - Preserved the Investment Tracker leaf location when the plugin unloads.

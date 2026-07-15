@@ -1,9 +1,9 @@
 {
   "id": "investment-tracker",
   "name": "Investment Tracker",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "minAppVersion": "1.12.7",
-  "description": "Track encrypted investment cash flows, valuations, annualized returns, and benchmark performance.",
+  "description": "Private, local-first portfolio tracker. Track cash flows, valuations, returns, and benchmarks while encrypted investment records stay in your vault. No account, telemetry, or developer backend.",
   "author": "Lam",
   "authorUrl": "https://github.com/joelam2023",
   "isDesktopOnly": false

@@ -1,11 +1,30 @@
 {
   "name": "investment-tracker",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "license": "MIT",
   "author": "Lam",
   "type": "module",
-  "description": "Account-level investment return tracking for Obsidian.",
+  "description": "Private, local-first portfolio tracking for Obsidian with encrypted investment records.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joelam2023/investment-tracker.git"
+  },
+  "homepage": "https://community.obsidian.md/plugins/investment-tracker",
+  "bugs": {
+    "url": "https://github.com/joelam2023/investment-tracker/issues"
+  },
+  "keywords": [
+    "obsidian-plugin",
+    "investment-tracker",
+    "portfolio-tracker",
+    "personal-finance",
+    "local-first",
+    "privacy",
+    "encryption",
+    "xirr",
+    "investment-performance"
+  ],
   "scripts": {
     "build": "node esbuild.config.mjs",
     "build:release": "node esbuild.config.mjs --release",
