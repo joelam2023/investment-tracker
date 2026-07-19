@@ -2,6 +2,14 @@
 
 All notable changes to Investment Tracker are documented here.
 
+## Unreleased
+
+- Added per-account currency selection when creating an account.
+- Added account name and benchmark editing through immutable `account-updated` events.
+- Added archive and restore actions that preserve encrypted account history while excluding archived accounts from portfolio totals.
+- Added regression tests, interface translations, and documentation for all nine supported languages.
+- Made no changes to the ledger schema, encryption format, network requests, migration behavior, or export formats.
+
 ## 1.0.3
 
 - Added complete public documentation for all nine supported interface languages: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, Spanish, German, French, and Brazilian Portuguese.

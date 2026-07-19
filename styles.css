@@ -664,6 +664,21 @@
   outline: none;
 }
 
+.investment-tracker-archived-account {
+  cursor: default;
+  opacity: 0.82;
+}
+
+.investment-tracker-archived-account:hover {
+  border-color: var(--background-modifier-border);
+  box-shadow: none;
+  transform: none;
+}
+
+.investment-tracker-archived-account .investment-tracker-link-button {
+  margin-top: 14px;
+}
+
 .investment-tracker-account-name {
   font-size: 16px;
   font-weight: 650;

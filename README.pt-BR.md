@@ -24,6 +24,7 @@ Ele funciona no nível da conta, permitindo calcular o desempenho dos investimen
 ## Recursos
 
 - Várias contas de investimento em USD, GBP, SGD, CNY, TWD, JPY, KRW, EUR ou BRL.
+- Escolha a moeda de cada conta ao criá-la, edite depois o nome ou a referência e arquive ou restaure a conta sem apagar o histórico criptografado.
 - Escrituração imutável baseada em eventos para aportes, retiradas e avaliações.
 - XIRR, lucro acumulado, rentabilidade anual e rentabilidade mensal pelo método Dietz Modificado.
 - Comparação com o Índice de Preços S&P 500 usando os mesmos fluxos de caixa.

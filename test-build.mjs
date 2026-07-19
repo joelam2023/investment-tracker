@@ -23,6 +23,7 @@ await esbuild.build({
     "tests/fred-provider.test.ts",
     "tests/money.test.ts",
     "tests/components.test.ts",
+    "tests/account-management.test.ts",
   ],
   bundle: true,
   format: "esm",

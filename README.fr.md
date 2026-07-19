@@ -24,6 +24,7 @@ Il fonctionne au niveau des comptes, ce qui permet de calculer la performance de
 ## Fonctionnalités
 
 - Plusieurs comptes d’investissement en USD, GBP, SGD, CNY, TWD, JPY, KRW, EUR ou BRL.
+- Choisissez la devise de chaque compte lors de sa création, modifiez ensuite son nom ou son indice de référence, puis archivez-le ou restaurez-le sans supprimer son historique chiffré.
 - Comptabilité immuable fondée sur des événements pour les versements, retraits et valorisations.
 - XIRR, gain cumulé, rendements annuels et rendements mensuels selon la méthode Modified Dietz.
 - Comparaison avec le S&P 500 Price Index en utilisant les mêmes flux de trésorerie.
