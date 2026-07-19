@@ -1,7 +1,8 @@
 import { Modal, Notice, Setting } from "obsidian";
 import type { App } from "obsidian";
-import type { CashFlowEvent, Currency, LedgerEvent, ValuationEvent } from "../types";
-import { getIntlLocale, t } from "../i18n";
+import type { AccountState, BenchmarkId, CashFlowEvent, Currency, LedgerEvent, ValuationEvent } from "../types";
+import { SUPPORTED_CURRENCIES } from "../types";
+import { currencyName, getIntlLocale, t } from "../i18n";
 import { currencyFractionDigits, parseMoneyStrict, parsePositiveMoneyStrict } from "../domain/money";
 import { PRIVACY_MASK_EVENT } from "../security/auto-lock";
 import { formatDate, todayLocal } from "./components";
@@ -10,6 +11,12 @@ export interface CreateAccountInput {
   name: string;
   startDate: string;
   initialValue: string;
+  currency: Currency;
+}
+
+export interface UpdateAccountInput {
+  name: string;
+  benchmarkId: BenchmarkId;
 }
 
 export interface RecordUpdateInput {
@@ -68,17 +75,24 @@ export class CreateAccountModal extends PrivacyModal {
   private name = "";
   private startDate = todayLocal();
   private initialValue = "";
+  private currency: Currency;
 
   constructor(
     app: App,
-    private readonly currency: Currency,
+    defaultCurrency: Currency,
     private readonly onSubmit: (input: CreateAccountInput) => Promise<void>,
   ) {
     super(app);
+    this.currency = defaultCurrency;
   }
 
   onOpen(): void {
+    this.renderForm();
+  }
+
+  private renderForm(): void {
     const { contentEl } = this;
+    contentEl.empty();
     contentEl.addClass("investment-tracker-modal");
     contentEl.createEl("h2", { text: t("Create investment account") });
     contentEl.createEl("p", {
@@ -89,7 +103,23 @@ export class CreateAccountModal extends PrivacyModal {
     new Setting(contentEl)
       .setName(t("Account name"))
       .setDesc(t("For example: Long-term investments or Education fund"))
-      .addText((text) => text.setPlaceholder(t("Long-term investments")).onChange((value) => (this.name = value)));
+      .addText((text) => {
+        text.inputEl.maxLength = 160;
+        text.setPlaceholder(t("Long-term investments")).setValue(this.name).onChange((value) => (this.name = value));
+      });
+
+    new Setting(contentEl)
+      .setName(t("Account currency"))
+      .setDesc(t("Choose the currency used by this account. It cannot be changed after the account is created."))
+      .addDropdown((dropdown) => {
+        for (const currency of SUPPORTED_CURRENCIES) {
+          dropdown.addOption(currency, `${currency} · ${currencyName(currency)}`);
+        }
+        dropdown.setValue(this.currency).onChange((value) => {
+          this.currency = value as Currency;
+          this.renderForm();
+        });
+      });
 
     new Setting(contentEl)
       .setName(t("Start date"))
@@ -102,7 +132,10 @@ export class CreateAccountModal extends PrivacyModal {
       .setName(t("Initial asset value ({currency})", { currency: this.currency }))
       .addText((text) => {
         configureMoneyInput(text.inputEl, this.currency, true);
-        text.setPlaceholder(currencyFractionDigits(this.currency) === 0 ? "100000" : "100000.00").onChange((value) => (this.initialValue = value));
+        text
+          .setPlaceholder(currencyFractionDigits(this.currency) === 0 ? "100000" : "100000.00")
+          .setValue(this.initialValue)
+          .onChange((value) => (this.initialValue = value));
       });
 
     new Setting(contentEl).addButton((button) =>
@@ -128,6 +161,7 @@ export class CreateAccountModal extends PrivacyModal {
               name: this.name.trim(),
               startDate: this.startDate,
               initialValue: this.initialValue.trim(),
+              currency: this.currency,
             });
             this.close();
           } catch (error) {
@@ -139,6 +173,71 @@ export class CreateAccountModal extends PrivacyModal {
   }
 
   onClose(): void {
+    this.name = "";
+    this.startDate = "";
+    this.initialValue = "";
+    this.contentEl.empty();
+  }
+}
+
+export class EditAccountModal extends PrivacyModal {
+  private name: string;
+  private benchmarkId: BenchmarkId;
+
+  constructor(
+    app: App,
+    private readonly account: AccountState,
+    private readonly onSubmit: (input: UpdateAccountInput) => Promise<void>,
+  ) {
+    super(app);
+    this.name = account.name;
+    this.benchmarkId = account.benchmarkId;
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.addClass("investment-tracker-modal");
+    contentEl.createEl("h2", { text: t("Edit account") });
+    contentEl.createEl("p", {
+      cls: "investment-tracker-modal-intro",
+      text: t("Account currency: {currency}. Currency cannot be changed after creation.", { currency: this.account.currency }),
+    });
+
+    new Setting(contentEl).setName(t("Account name")).addText((text) => {
+      text.inputEl.maxLength = 160;
+      text.setValue(this.name).onChange((value) => (this.name = value));
+    });
+
+    new Setting(contentEl)
+      .setName(t("Comparison benchmark"))
+      .addDropdown((dropdown) => dropdown
+        .addOption("sp500", t("S&P 500 data"))
+        .addOption("none", t("No benchmark selected"))
+        .setValue(this.benchmarkId)
+        .onChange((value) => (this.benchmarkId = value as BenchmarkId)));
+
+    new Setting(contentEl).addButton((button) => button
+      .setButtonText(t("Save changes"))
+      .setCta()
+      .onClick(async () => {
+        const name = this.name.trim();
+        if (!name) {
+          new Notice(t("Enter an account name"));
+          return;
+        }
+        button.setDisabled(true);
+        try {
+          await this.onSubmit({ name, benchmarkId: this.benchmarkId });
+          this.close();
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : t("Could not save the update"));
+          button.setDisabled(false);
+        }
+      }));
+  }
+
+  onClose(): void {
+    this.name = "";
     this.contentEl.empty();
   }
 }

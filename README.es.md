@@ -24,6 +24,7 @@ Funciona a nivel de cuenta, por lo que puedes calcular el rendimiento de tus inv
 ## Funciones
 
 - Varias cuentas de inversión en USD, GBP, SGD, CNY, TWD, JPY, KRW, EUR o BRL.
+- Elige la moneda de cada cuenta al crearla, edita después su nombre o índice de referencia y archívala o restáurala sin borrar el historial cifrado.
 - Contabilidad inmutable basada en eventos para aportaciones, retiradas y valoraciones.
 - XIRR, beneficio acumulado, rentabilidades anuales y rentabilidades mensuales según Modified Dietz.
 - Comparación con el S&P 500 Price Index utilizando los mismos flujos de efectivo.

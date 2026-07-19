@@ -24,6 +24,7 @@ It works at the account level, so you can calculate investment performance witho
 ## Features
 
 - Multiple investment accounts in USD, GBP, SGD, CNY, TWD, JPY, KRW, EUR, or BRL.
+- Choose each account's currency at creation, edit its name or benchmark later, and archive or restore it without deleting encrypted history.
 - Immutable event-based bookkeeping for contributions, withdrawals, and valuations.
 - XIRR, cumulative profit, yearly returns, and monthly Modified Dietz returns.
 - Same-cash-flow comparison with the S&P 500 Price Index.

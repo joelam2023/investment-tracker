@@ -44,10 +44,12 @@ import {
   ConfirmModal,
   CorrectEventModal,
   CreateAccountModal,
+  EditAccountModal,
   RecordUpdateModal,
   isCorrectableEvent,
   type CreateAccountInput,
   type RecordUpdateInput,
+  type UpdateAccountInput,
 } from "./modals";
 
 export const INVESTMENT_TRACKER_VIEW = "investment-tracker-view";
@@ -84,6 +86,8 @@ export interface InvestmentTrackerController {
   portfolioAnnualReturns(snapshot: LedgerSnapshot, currency: Currency): AnnualReturnResult[];
   portfolioMonthlyPerformance(snapshot: LedgerSnapshot, currency: Currency): MonthlyPerformanceResult;
   createAccount(input: CreateAccountInput): Promise<void>;
+  updateAccount(account: AccountState, input: UpdateAccountInput): Promise<void>;
+  setAccountArchived(account: AccountState, archived: boolean): Promise<void>;
   recordUpdate(account: AccountState, input: RecordUpdateInput): Promise<void>;
   correctEvent(event: LedgerEvent, date: string, amount: string, note: string): Promise<void>;
   voidEvent(event: LedgerEvent): Promise<void>;
@@ -777,6 +781,7 @@ export class InvestmentTrackerView extends ItemView {
     addButton.addEventListener("click", () => this.openCreateAccount());
 
     const activeAccounts = snapshot.accounts.filter((account) => !account.archived);
+    const archivedAccounts = snapshot.accounts.filter((account) => account.archived);
     if (activeAccounts.length === 0) {
       const empty = shell.createDiv({ cls: "investment-tracker-empty" });
       const icon = empty.createDiv();
@@ -787,6 +792,7 @@ export class InvestmentTrackerView extends ItemView {
       });
       const button = empty.createEl("button", { cls: "mod-cta", text: t("New account") });
       button.addEventListener("click", () => this.openCreateAccount());
+      this.renderArchivedAccounts(shell, archivedAccounts);
       if (snapshot.warnings.length > 0) this.renderWarnings(shell, snapshot.warnings);
       return;
     }
@@ -932,6 +938,8 @@ export class InvestmentTrackerView extends ItemView {
       });
     }
 
+    this.renderArchivedAccounts(shell, archivedAccounts);
+
     const warnings = [...snapshot.warnings, ...summary.warnings];
     if (warnings.length > 0) this.renderWarnings(shell, warnings);
   }
@@ -956,6 +964,8 @@ export class InvestmentTrackerView extends ItemView {
     const toolbar = header.createDiv({ cls: "investment-tracker-toolbar" });
     this.renderPrivacyToggle(toolbar);
     this.renderLockButton(toolbar);
+    addIconButton(toolbar, "pencil", t("Edit account"), () => this.openEditAccount(account));
+    addIconButton(toolbar, "archive", t("Archive account"), () => this.confirmArchiveAccount(account));
     const updateButton = toolbar.createEl("button", {
       cls: "mod-cta investment-tracker-primary-button",
       text: t("Update returns"),
@@ -1170,6 +1180,59 @@ export class InvestmentTrackerView extends ItemView {
       new Notice(t("Investment account created"));
       await this.render();
     }).open();
+  }
+
+  private openEditAccount(account: AccountState): void {
+    new EditAccountModal(this.app, account, async (input) => {
+      await this.controller.updateAccount(account, input);
+      new Notice(t("Account updated"));
+      await this.render();
+    }).open();
+  }
+
+  private confirmArchiveAccount(account: AccountState): void {
+    new ConfirmModal(
+      this.app,
+      t("Archive account"),
+      t("Archived accounts are excluded from portfolio totals, while their encrypted history is preserved."),
+      t("Archive account"),
+      async () => {
+        await this.controller.setAccountArchived(account, true);
+        this.selectedAccountId = null;
+        new Notice(t("Account archived"));
+        await this.render();
+      },
+    ).open();
+  }
+
+  private renderArchivedAccounts(parent: HTMLElement, accounts: AccountState[]): void {
+    if (accounts.length === 0) return;
+    const section = parent.createDiv({ cls: "investment-tracker-section" });
+    const sectionHeader = section.createDiv({ cls: "investment-tracker-section-header" });
+    sectionHeader.createEl("h2", { text: t("Archived accounts") });
+    section.createEl("p", {
+      cls: "investment-tracker-account-meta",
+      text: t("Archived accounts are excluded from portfolio totals, while their encrypted history is preserved."),
+    });
+    const grid = section.createDiv({ cls: "investment-tracker-accounts" });
+    for (const account of accounts) {
+      const card = grid.createDiv({ cls: "investment-tracker-account-card investment-tracker-archived-account" });
+      const accountHeader = card.createDiv({ cls: "investment-tracker-account-header" });
+      accountHeader.createDiv({ cls: "investment-tracker-account-name", text: account.name });
+      accountHeader.createDiv({ cls: "investment-tracker-account-meta", text: account.currency });
+      const restore = card.createEl("button", { cls: "investment-tracker-link-button", text: t("Restore account") });
+      restore.addEventListener("click", async () => {
+        restore.disabled = true;
+        try {
+          await this.controller.setAccountArchived(account, false);
+          new Notice(t("Account restored"));
+          await this.render();
+        } catch (error) {
+          new Notice(error instanceof Error ? error.message : t("Could not save the update"));
+          restore.disabled = false;
+        }
+      });
+    }
   }
 
   private openUpdateAccount(account: AccountState, initial?: Partial<RecordUpdateInput>): void {

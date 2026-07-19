@@ -4,6 +4,7 @@ import type {
   AnnualReturnResult,
   AccountMetrics,
   AccountState,
+  AccountUpdatedEvent,
   BenchmarkResult,
   CashFlowEvent,
   Currency,
@@ -18,6 +19,7 @@ import type {
 import { DEFAULT_SETTINGS } from "./types";
 import { parseSettings } from "./settings";
 import { normalizeMoney, parseMoneyStrict } from "./domain/money";
+import { buildAccountUpdateEvent, buildInitialAccountEvents } from "./domain/account-management";
 import {
   calculateAccountAnnualReturns,
   calculateAccountMetrics,
@@ -41,7 +43,7 @@ import {
   type PortfolioSummary,
 } from "./ui/view";
 import { InvestmentTrackerSettingTab } from "./ui/settings";
-import type { CreateAccountInput, RecordUpdateInput } from "./ui/modals";
+import type { CreateAccountInput, RecordUpdateInput, UpdateAccountInput } from "./ui/modals";
 import { todayLocal } from "./ui/components";
 import { resolveLocale, setLanguageSetting, suggestedCurrency, t } from "./i18n";
 import {
@@ -322,43 +324,40 @@ export default class InvestmentTrackerPlugin extends Plugin {
 
   async createAccount(input: CreateAccountInput): Promise<void> {
     const accountId = newId();
-    const base = Date.now();
-    const amount = normalizeMoney(input.initialValue, this.settings.baseCurrency);
-    const common = { schemaVersion: 1 as const, effectiveDate: input.startDate };
-    const events: LedgerEvent[] = [
+    const events = buildInitialAccountEvents(
+      input,
+      this.settings.benchmarkId,
       {
-        ...common,
-        type: "account-created",
-        eventId: newId(),
-        recordedAt: timestampWithOffset(base, 0),
         accountId,
-        name: input.name,
-        currency: this.settings.baseCurrency,
-        benchmarkId: this.settings.benchmarkId,
+        accountCreatedEventId: newId(),
+        contributionEventId: newId(),
+        valuationEventId: newId(),
       },
-      {
-        ...common,
-        type: "cash-flow",
-        eventId: newId(),
-        recordedAt: timestampWithOffset(base, 1),
-        accountId,
-        direction: "contribution",
-        amount,
-        currency: this.settings.baseCurrency,
-        note: t("Initial contribution"),
-      },
-      {
-        ...common,
-        type: "valuation",
-        eventId: newId(),
-        recordedAt: timestampWithOffset(base, 2),
-        accountId,
-        totalValue: amount,
-        currency: this.settings.baseCurrency,
-        note: t("Initial asset value"),
-      },
-    ];
+      Date.now(),
+      { contribution: t("Initial contribution"), valuation: t("Initial asset value") },
+    );
     await this.store.appendEvents(events);
+    await this.refreshViews();
+  }
+
+  private accountUpdateEvent(
+    account: AccountState,
+    changes: Pick<AccountUpdatedEvent, "name" | "benchmarkId" | "archived">,
+  ): AccountUpdatedEvent {
+    return buildAccountUpdateEvent(account, changes, newId(), new Date().toISOString());
+  }
+
+  async updateAccount(account: AccountState, input: UpdateAccountInput): Promise<void> {
+    const name = input.name.trim();
+    if (!name) throw new Error(t("Enter an account name"));
+    if (name === account.name && input.benchmarkId === account.benchmarkId) return;
+    await this.store.appendEvent(this.accountUpdateEvent(account, { name, benchmarkId: input.benchmarkId }));
+    await this.refreshViews();
+  }
+
+  async setAccountArchived(account: AccountState, archived: boolean): Promise<void> {
+    if (account.archived === archived) return;
+    await this.store.appendEvent(this.accountUpdateEvent(account, { archived }));
     await this.refreshViews();
   }
 

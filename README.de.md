@@ -24,6 +24,7 @@ Das Plugin arbeitet auf Kontoebene. So können Sie die Anlageperformance berechn
 ## Funktionen
 
 - Mehrere Anlagekonten in USD, GBP, SGD, CNY, TWD, JPY, KRW, EUR oder BRL.
+- Wählen Sie die Währung jedes Kontos bei der Erstellung, bearbeiten Sie später Name oder Benchmark und archivieren oder reaktivieren Sie Konten, ohne den verschlüsselten Verlauf zu löschen.
 - Unveränderliche, ereignisbasierte Buchführung für Einzahlungen, Entnahmen und Bewertungen.
 - XIRR, kumulierter Gewinn, Jahresrenditen und Monatsrenditen nach Modified Dietz.
 - Vergleich mit dem S&P 500 Price Index unter Verwendung identischer Zahlungsflüsse.
