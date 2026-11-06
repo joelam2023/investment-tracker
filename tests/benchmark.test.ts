@@ -212,3 +212,11 @@ test("cache schema 1 remains S&P-only and schema 2 validates benchmark identity"
   payload = { schemaVersion: 2, ...market, benchmarkId: "other" };
   await assert.rejects(cache.load(), /Invalid market data source/);
 });
+
+test("a December 31 year start on a weekend uses the last close of the old year", () => {
+  const row: AnnualReturnResult = { year: 2024, rate: 0.2, startDate: "2023-12-31", endDate: "2024-12-31", period: "full-year", quality: "complete", status: "ok", needsOpeningValuation: false, details: [] };
+  const result = calculateMarketAnnualReturns([row], { points: [
+    { date: "2023-12-29", close: 100 }, { date: "2024-01-02", close: 150 }, { date: "2024-12-31", close: 120 },
+  ] });
+  assert.ok(Math.abs(result[0]!.rate! - 0.2) < 1e-12);
+});

@@ -61,7 +61,10 @@ export function calculateMarketAnnualReturns(
     if (!period.startDate || !period.endDate || period.startDate >= period.endDate) return [];
     const startDate = period.startDate;
     const endDate = period.endDate;
-    const opening = startDate === `${period.year}-01-01`
+    // A year-end boundary (Jan 1 or the previous Dec 31) is an end-of-day valuation:
+    // use the last close on or before it, even when Dec 31 falls on a weekend.
+    const yearBoundary = startDate === `${period.year}-01-01` || startDate === `${period.year - 1}-12-31`;
+    const opening = yearBoundary
       ? points.filter((point) => point.date <= startDate).at(-1)
       : points.find((point) => point.date >= startDate);
     const closing = points.filter((point) => point.date <= endDate).at(-1);

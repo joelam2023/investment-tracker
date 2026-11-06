@@ -71,3 +71,14 @@ test("outcomes need my return and at least one index", () => {
   assert.equal(outcomeOf(row(null, 0.05, 0.08), true), "unknown");
   assert.equal(outcomeOf(row(0.1, null, null), true), "unknown");
 });
+
+test("an index year that starts on a weekend December 31 is priced from the last close of the old year", () => {
+  const events: LedgerEvent[] = [v(a, "2023-12-31", 100), v(a, "2024-12-31", 110)];
+  const report = calculateLinkedReport([a], events, "USD", "2025-01-10", a);
+  const rows = compareYears(report, {
+    sp500: market("sp500", [["2023-12-29", 100], ["2024-01-02", 90], ["2024-12-31", 110]]),
+  });
+  const row = rows.find((item) => item.year === 2024)!;
+  assert.equal(row.start, "2023-12-31");
+  near(row.sp500, 0.1);
+});
