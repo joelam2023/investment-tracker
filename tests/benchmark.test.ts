@@ -35,6 +35,53 @@ test("weekend contributions use the next trading day", () => {
   assert.ok(Math.abs(result.result.virtualValue - 110) < 1e-8);
 });
 
+test("a weekend contribution on the valuation date is invested at the last close", () => {
+  const fridayClose: MarketSeries = {
+    ...market,
+    points: [
+      { date: "2024-01-05", close: 100 },
+      { date: "2025-01-03", close: 110 },
+    ],
+  };
+  const result = calculateSameCashFlowBenchmark(
+    [
+      { date: "2024-01-05", direction: "contribution", amount: 100 },
+      { date: "2025-01-04", direction: "contribution", amount: 50 },
+    ],
+    "2025-01-04",
+    160,
+    null,
+    "USD",
+    fridayClose,
+  );
+  assert.equal(result.result.status, "ok");
+  assert.ok(result.result.virtualValue !== null && Math.abs(result.result.virtualValue - 160) < 1e-8);
+  assert.ok(result.result.excessValue !== null && Math.abs(result.result.excessValue) < 1e-8);
+});
+
+test("a gap in market data before the last close still stops the comparison", () => {
+  const gapped: MarketSeries = {
+    ...market,
+    points: [
+      { date: "2024-01-05", close: 100 },
+      { date: "2024-03-01", close: 104 },
+      { date: "2025-01-03", close: 110 },
+    ],
+  };
+  const result = calculateSameCashFlowBenchmark(
+    [
+      { date: "2024-01-05", direction: "contribution", amount: 100 },
+      { date: "2024-02-01", direction: "contribution", amount: 50 },
+    ],
+    "2025-01-03",
+    160,
+    null,
+    "USD",
+    gapped,
+  );
+  assert.equal(result.result.status, "unavailable");
+});
+
 test("portfolio matching the same-cash-flow benchmark has zero excess", () => {
   const result = calculateSameCashFlowBenchmark(
     [{ date: "2024-01-05", direction: "contribution", amount: 100 }],

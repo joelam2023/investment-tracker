@@ -112,15 +112,19 @@ export function calculateSameCashFlowBenchmark(
     return unavailable(market.benchmarkId, market.sourceLabel, [...warnings, t("No contribution records are available for the benchmark simulation")]);
   }
 
-  const mapped = flows.map((flow) => ({
-    flow,
-    point: points.find((point) => point.date >= flow.date && dayDifference(flow.date, point.date) <= 7),
-  }));
+  const endPoint = points.at(-1);
+  if (!endPoint) return unavailable(market.benchmarkId, market.sourceLabel, warnings);
+  const mapped = flows.map((flow) => {
+    const nextClose = points.find((point) => point.date >= flow.date && dayDifference(flow.date, point.date) <= 7);
+    // A flow after the last close before the valuation date (for example a weekend
+    // contribution recorded with a weekend valuation) has no later close yet. Invest it
+    // at that last close: it has not been exposed to any observable market movement.
+    const settledAtValuation = !nextClose && flow.date > endPoint.date && dayDifference(endPoint.date, flow.date) <= 7;
+    return { flow, point: nextClose ?? (settledAtValuation ? endPoint : undefined) };
+  });
   if (mapped.some((item) => !item.point)) {
     return unavailable(market.benchmarkId, market.sourceLabel, [...warnings, t("Benchmark data does not cover one or more cash-flow dates; no interpolation was used")]);
   }
-  const endPoint = points.at(-1);
-  if (!endPoint) return unavailable(market.benchmarkId, market.sourceLabel, warnings);
   if (dayDifference(endPoint.date, asOf) > 7) {
     return unavailable(market.benchmarkId, market.sourceLabel, [...warnings, t("Benchmark data is only available through {date}, more than 7 days before the valuation date", { date: endPoint.date })]);
   }
