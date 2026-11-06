@@ -1419,3 +1419,20 @@
   .investment-tracker-longterm-stats { gap: 18px; }
   .investment-tracker-longterm-value { font-size: 16px; }
 }
+
+/* Comparison older than a week: say where it stops and how the indices moved since. */
+.investment-tracker-stale-notice {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-orange) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-orange) 35%, transparent);
+  font-size: var(--font-ui-small);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.investment-tracker-stale-notice-head { display: flex; align-items: flex-start; gap: 6px; font-weight: 600; }
+.investment-tracker-stale-notice-head .investment-tracker-stale-icon { color: var(--color-orange); margin-top: 2px; }
+.investment-tracker-stale-notice > div:not(:first-child) { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.investment-tracker-stale-notice-button { align-self: flex-start; margin-top: 6px; }

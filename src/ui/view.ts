@@ -64,6 +64,7 @@ import {
   accountYearComparison,
   compareYears,
   currentYearComparison,
+  indexUpdateAfter,
   lastValuationDates,
   marketRange,
   renderAccountList,
@@ -928,9 +929,13 @@ export class InvestmentTrackerView extends ItemView {
 
     const years = compareYears(portfolioReport, markets);
     const metrics = scoped.map((account) => this.controller.accountMetrics(account, snapshot.events));
+    const thisYear = currentYearComparison(years, currentYear);
     renderHero(shell, {
       year: currentYear,
-      row: currentYearComparison(years, currentYear),
+      row: thisYear,
+      today,
+      latestIndex: thisYear?.end ? indexUpdateAfter(markets, thisYear.end, currentYear, today) : null,
+      onRecord: () => this.openRecord(null),
       currency,
       includeNasdaq,
       visible,
@@ -966,7 +971,8 @@ export class InvestmentTrackerView extends ItemView {
     performance: MonthlyPerformanceResult,
   ): NonNullable<InvestmentTrackerView["homeCache"]> {
     const latestRecord = snapshot.events.reduce((latest, event) => (event.recordedAt > latest ? event.recordedAt : latest), "");
-    const key = [currency, range.start, range.end, snapshot.events.length, latestRecord].join("|");
+    const today = todayLocal();
+    const key = [currency, range.start, range.end, today, snapshot.events.length, latestRecord].join("|");
     if (this.homeCache?.key === key) return this.homeCache;
     const cache: NonNullable<InvestmentTrackerView["homeCache"]> = { key, markets: null, benchmark: null, marketsDone: false, benchmarkDone: false };
     this.homeCache = cache;
@@ -974,7 +980,8 @@ export class InvestmentTrackerView extends ItemView {
       if (this.homeCache === cache && this.financialValuesVisible && !this.selectedAccountId) this.renderPreservingScroll();
     };
     // Only index ids, currency and dates leave the device; amounts stay in the local simulation.
-    void this.controller.loadLinkedMarkets(currency, range.start, range.end, true)
+    // Load through today so the home page can say how the indices moved after the last update.
+    void this.controller.loadLinkedMarkets(currency, range.start, today > range.end ? today : range.end, true)
       .then((markets) => { cache.markets = markets; })
       .catch(() => { cache.markets = {}; })
       .finally(() => { cache.marketsDone = true; refresh(); });

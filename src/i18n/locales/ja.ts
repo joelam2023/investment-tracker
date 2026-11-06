@@ -610,4 +610,9 @@ export const ja: Record<string, string> = {
   "Calculation notes and data sources": "計算方法とデータの出典",
   "Yearly returns use one Modified Dietz calculation per year. Both indices are bought with your same starting value and cash flows on the same dates.": "年ごとの収益率は1年分を1回の修正ディーツ法で計算します。両指数は同じ開始資産と同じ日の入出金で購入したものとして計算します。",
   "Long-term annualized returns use XIRR over every dated contribution and withdrawal (Actual/365).": "長期の年率収益率は、日付付きのすべての入金と出金からXIRRで計算します（Actual/365）。",
+  "{year} · through {date}": "{year}年 · {date}まで",
+  "Compared only through {date}, your last update {days} days ago.": "比較は前回の記録日である{date}（{days}日前）までです。",
+  "Since then, through {date}: {changes}": "その後{date}まで：{changes}",
+  "Index returns this year through {date}: {changes}": "指数の年初来リターン（{date}まで）：{changes}",
+  "Record the latest value": "最新の評価額を記録",
 };

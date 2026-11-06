@@ -610,4 +610,9 @@ export const ptBR: Record<string, string> = {
   "Calculation notes and data sources": "Notas de cálculo e fontes de dados",
   "Yearly returns use one Modified Dietz calculation per year. Both indices are bought with your same starting value and cash flows on the same dates.": "A rentabilidade anual usa um único cálculo Modified Dietz por ano. Os dois índices são comprados com o mesmo valor inicial e os mesmos fluxos nas mesmas datas.",
   "Long-term annualized returns use XIRR over every dated contribution and withdrawal (Actual/365).": "A rentabilidade anualizada de longo prazo usa XIRR sobre cada aporte e retirada com data (Actual/365).",
+  "{year} · through {date}": "{year} · até {date}",
+  "Compared only through {date}, your last update {days} days ago.": "A comparação vai só até {date}, sua última atualização há {days} dias.",
+  "Since then, through {date}: {changes}": "Desde então, até {date}: {changes}",
+  "Index returns this year through {date}: {changes}": "Rentabilidade dos índices neste ano até {date}: {changes}",
+  "Record the latest value": "Registrar o valor atual",
 };

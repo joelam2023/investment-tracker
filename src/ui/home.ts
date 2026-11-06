@@ -110,6 +110,34 @@ export function marketRange(reports: LinkedReport[]): { start: string; end: stri
   return start && end && start < end ? { start, end } : null;
 }
 
+/** How each index moved after the comparison end date, and its own return this year. */
+export interface IndexUpdate {
+  date: string;
+  sinceEnd: Partial<Record<"sp500" | "nasdaq100", number>>;
+  yearToDate: Partial<Record<"sp500" | "nasdaq100", number>>;
+}
+
+/** Comparisons older than this are flagged so "so far" is not read as "up to today". */
+export const STALE_COMPARISON_DAYS = 7;
+
+export function indexUpdateAfter(markets: LinkedMarkets, end: string, year: number, today: string): IndexUpdate | null {
+  const ids = (["sp500", "nasdaq100"] as const).filter((id) => markets[id]);
+  const latestDates = ids.map((id) => markets[id]!.points.filter((point) => point.date <= today && point.close > 0).map((point) => point.date).sort().at(-1))
+    .filter((date): date is string => !!date);
+  if (latestDates.length === 0) return null;
+  const date = latestDates.sort()[0]!;
+  if (date <= end) return null;
+  const update: IndexUpdate = { date, sinceEnd: {}, yearToDate: {} };
+  for (const id of ids) {
+    const points = markets[id]!.points.filter((point) => Number.isFinite(point.close) && point.close > 0).sort((a, b) => a.date.localeCompare(b.date));
+    const closeOn = (day: string) => points.filter((point) => point.date <= day).at(-1);
+    const latest = closeOn(date), atEnd = closeOn(end), yearStart = closeOn(`${year - 1}-12-31`);
+    if (latest && atEnd && daysBetween(atEnd.date, end) <= 7) update.sinceEnd[id] = latest.close / atEnd.close - 1;
+    if (latest && yearStart && daysBetween(yearStart.date, `${year - 1}-12-31`) <= 7) update.yearToDate[id] = latest.close / yearStart.close - 1;
+  }
+  return update;
+}
+
 function rateText(value: number | null, visible: boolean, digits = 1): string {
   if (!visible) return HIDDEN_FINANCIAL_VALUE;
   if (value === null || !Number.isFinite(value)) return "—";
@@ -149,6 +177,10 @@ export interface HeroInput {
   marketState: "ready" | "loading" | "unavailable" | "hidden";
   totalValue: number;
   cumulativeProfit: number;
+  today: string;
+  /** Index moves after the comparison end date; null when not loaded or not newer. */
+  latestIndex: IndexUpdate | null;
+  onRecord: () => void;
 }
 
 export function renderHero(parent: HTMLElement, input: HeroInput): void {
@@ -156,10 +188,13 @@ export function renderHero(parent: HTMLElement, input: HeroInput): void {
   const hero = parent.createDiv({ cls: "investment-tracker-hero" });
   const main = hero.createDiv({ cls: "investment-tracker-hero-year" });
 
-  let periodLabel = t("{year} so far", { year });
+  const staleDays = row?.end ? daysBetween(row.end, input.today) : 0;
+  const stale = staleDays > STALE_COMPARISON_DAYS;
+  let periodLabel = stale ? t("{year} · through {date}", { year, date: shortDate(row!.end!) }) : t("{year} so far", { year });
   if (row?.start && !isYearBoundary(row.start, year)) periodLabel = t("{year} · since {date}", { year, date: shortDate(row.start) });
-  if (row?.end) periodLabel += ` · ${t("through {date}", { date: shortDate(row.end) })}`;
+  if (row?.end && (!stale || (row.start && !isYearBoundary(row.start, year)))) periodLabel += ` · ${t("through {date}", { date: shortDate(row.end) })}`;
   main.createDiv({ cls: "investment-tracker-hero-label", text: periodLabel });
+  if (stale && row?.end) renderStaleNotice(main, row.end, staleDays, input);
 
   if (!row || row.mine === null) {
     main.createDiv({ cls: "investment-tracker-hero-rate is-empty", text: "—" });
@@ -192,6 +227,26 @@ export function renderHero(parent: HTMLElement, input: HeroInput): void {
   stat(t("Earned this year"), yearProfit(row), true);
   stat(t("Net contributions this year"), row ? row.netFlow : null, false);
   stat(t("Total profit"), input.cumulativeProfit, true);
+}
+
+function renderStaleNotice(parent: HTMLElement, end: string, days: number, input: HeroInput): void {
+  const notice = parent.createDiv({ cls: "investment-tracker-stale-notice", attr: { role: "note" } });
+  const head = notice.createDiv({ cls: "investment-tracker-stale-notice-head" });
+  setIcon(head.createSpan({ cls: "investment-tracker-stale-icon" }), "clock");
+  head.createSpan({ text: t("Compared only through {date}, your last update {days} days ago.", { date: shortDate(end), days }) });
+  const update = input.latestIndex;
+  const names: Record<"sp500" | "nasdaq100", string> = { sp500: t("S&P 500"), nasdaq100: t("Nasdaq-100") };
+  const list = (values: IndexUpdate["sinceEnd"]) => (["sp500", "nasdaq100"] as const)
+    .filter((id) => values[id] !== undefined && (id === "sp500" || input.includeNasdaq))
+    .map((id) => `${names[id]} ${rateText(values[id]!, true)}`).join(" · ");
+  if (update) {
+    const since = list(update.sinceEnd), ytd = list(update.yearToDate);
+    // Index moves are public market data, so they stay visible when amounts are hidden.
+    if (since) notice.createDiv({ text: t("Since then, through {date}: {changes}", { date: shortDate(update.date), changes: since }) });
+    if (ytd) notice.createDiv({ text: t("Index returns this year through {date}: {changes}", { date: shortDate(update.date), changes: ytd }) });
+  }
+  const button = notice.createEl("button", { cls: "investment-tracker-stale-notice-button", text: t("Record the latest value") });
+  button.addEventListener("click", input.onRecord);
 }
 
 function renderComparisonBars(parent: HTMLElement, row: YearComparison, input: HeroInput): void {

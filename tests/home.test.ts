@@ -3,7 +3,7 @@ import test from "node:test";
 import type { AccountState, CashFlowEvent, LedgerEvent, ValuationEvent } from "../src/types";
 import type { MarketSeries } from "../src/market/benchmark";
 import { calculateLinkedReport } from "../src/domain/linked-return";
-import { compareYears, currentYearComparison, marketRange, outcomeLabel, outcomeOf, yearProfit, type YearComparison } from "../src/ui/home";
+import { compareYears, currentYearComparison, indexUpdateAfter, marketRange, outcomeLabel, outcomeOf, yearProfit, type YearComparison } from "../src/ui/home";
 
 const account = (id: string): AccountState => ({ accountId: id, name: "Synthetic", currency: "USD", benchmarkId: "sp500", openedOn: "2025-01-01", archived: false });
 const a = account("synthetic-a");
@@ -81,4 +81,16 @@ test("an index year that starts on a weekend December 31 is priced from the last
   const row = rows.find((item) => item.year === 2024)!;
   assert.equal(row.start, "2023-12-31");
   near(row.sp500, 0.1);
+});
+
+test("a stale comparison reports how each index moved afterwards and its own return this year", () => {
+  const sp = market("sp500", [["2025-12-31", 100], ["2026-10-09", 114], ["2026-11-05", 107]]);
+  const ndx = market("nasdaq100", [["2025-12-31", 200], ["2026-10-09", 244], ["2026-11-05", 210]]);
+  const update = indexUpdateAfter({ sp500: sp, nasdaq100: ndx }, "2026-10-11", 2026, "2026-11-07")!;
+  assert.equal(update.date, "2026-11-05");
+  near(update.sinceEnd.sp500, 107 / 114 - 1);
+  near(update.yearToDate.sp500, 0.07);
+  near(update.yearToDate.nasdaq100, 0.05);
+  assert.equal(indexUpdateAfter({ sp500: sp }, "2026-11-05", 2026, "2026-11-07"), null);
+  assert.equal(indexUpdateAfter({}, "2026-10-11", 2026, "2026-11-07"), null);
 });

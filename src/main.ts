@@ -94,10 +94,11 @@ function unavailableBenchmark(message: string, sourceLabel = "S&P 500 Price Inde
 }
 
 function cacheCovers(series: MarketSeries, start: string, asOf: string): boolean {
-  const points = [...series.points].sort((a, b) => a.date.localeCompare(b.date));
+  // A cache that already reaches past asOf still covers it: callers only use closes on or before asOf.
+  const points = [...series.points].filter((point) => point.date <= asOf).sort((a, b) => a.date.localeCompare(b.date));
   const first = points[0];
   const last = points.at(-1);
-  if (!first || !last || last.date > asOf) return false;
+  if (!first || !last) return false;
   const startGap = (Date.parse(`${first.date}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000;
   const endGap = (Date.parse(`${asOf}T00:00:00Z`) - Date.parse(`${last.date}T00:00:00Z`)) / 86_400_000;
   return startGap <= 7 && endGap >= 0 && endGap <= 7;

@@ -610,4 +610,9 @@ export const zhTW: Record<string, string> = {
   "Calculation notes and data sources": "計算說明與資料來源",
   "Yearly returns use one Modified Dietz calculation per year. Both indices are bought with your same starting value and cash flows on the same dates.": "每年報酬以全年一次 Modified Dietz 計算；兩個指數以你相同的起始資產與相同日期的資金進出買入計算。",
   "Long-term annualized returns use XIRR over every dated contribution and withdrawal (Actual/365).": "長期年化報酬以每一筆帶日期的投入與轉出計算 XIRR（Actual/365）。",
+  "{year} · through {date}": "{year} 年 · 截至 {date}",
+  "Compared only through {date}, your last update {days} days ago.": "比較只算到 {date}，也就是你最後一次記錄的那天（{days} 天前）。",
+  "Since then, through {date}: {changes}": "之後到 {date}：{changes}",
+  "Index returns this year through {date}: {changes}": "指數今年至今（到 {date}）：{changes}",
+  "Record the latest value": "記一筆最新估值",
 };

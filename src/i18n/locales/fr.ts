@@ -610,4 +610,9 @@ export const fr: Record<string, string> = {
   "Calculation notes and data sources": "Méthodes de calcul et sources des données",
   "Yearly returns use one Modified Dietz calculation per year. Both indices are bought with your same starting value and cash flows on the same dates.": "Le rendement annuel utilise un seul calcul Modified Dietz par an. Les deux indices sont achetés avec la même valeur de départ et les mêmes flux aux mêmes dates.",
   "Long-term annualized returns use XIRR over every dated contribution and withdrawal (Actual/365).": "Le rendement annualisé à long terme utilise le XIRR sur chaque versement et retrait daté (Actual/365).",
+  "{year} · through {date}": "{year} · jusqu’au {date}",
+  "Compared only through {date}, your last update {days} days ago.": "La comparaison s’arrête au {date}, votre dernière mise à jour il y a {days} jours.",
+  "Since then, through {date}: {changes}": "Depuis, jusqu’au {date} : {changes}",
+  "Index returns this year through {date}: {changes}": "Rendement des indices cette année jusqu’au {date} : {changes}",
+  "Record the latest value": "Saisir la valeur actuelle",
 };

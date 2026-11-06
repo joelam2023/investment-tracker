@@ -610,4 +610,9 @@ export const ko: Record<string, string> = {
   "Calculation notes and data sources": "계산 방법과 데이터 출처",
   "Yearly returns use one Modified Dietz calculation per year. Both indices are bought with your same starting value and cash flows on the same dates.": "연도별 수익률은 한 해 전체를 Modified Dietz 방식으로 한 번 계산합니다. 두 지수는 같은 시작 자산과 같은 날짜의 입출금으로 매수한 것으로 계산합니다.",
   "Long-term annualized returns use XIRR over every dated contribution and withdrawal (Actual/365).": "장기 연환산 수익률은 날짜가 있는 모든 입금과 출금으로 XIRR을 계산합니다(Actual/365).",
+  "{year} · through {date}": "{year}년 · {date}까지",
+  "Compared only through {date}, your last update {days} days ago.": "비교는 마지막 기록일인 {date}({days}일 전)까지만 계산됩니다.",
+  "Since then, through {date}: {changes}": "그 후 {date}까지: {changes}",
+  "Index returns this year through {date}: {changes}": "지수 연초 이후 수익률({date}까지): {changes}",
+  "Record the latest value": "최신 평가액 기록",
 };
