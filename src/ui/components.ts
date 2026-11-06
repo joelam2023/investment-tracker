@@ -166,7 +166,11 @@ export function renderAnnualReturnChart(parent: HTMLElement, input: AnnualChartS
   }
   const years = [...new Set(series.flatMap((item) => item.values.map((point) => point.year)))].sort((a, b) => a - b);
   const scale = buildChartScale(series.flatMap((item) => item.values.map((point) => point.amount)), "rate");
-  const width = 900, height = 320, left = 76, right = 22, top = 22, bottom = 48;
+  // Draw at the real container width so labels keep their size on phones.
+  const measured = typeof parent.getBoundingClientRect === "function" ? Math.round(parent.getBoundingClientRect().width) : 0;
+  const width = measured > 200 ? measured : 900;
+  const narrow = width < 520;
+  const height = narrow ? 220 : 280, left = narrow ? 40 : 56, right = 8, top = 16, bottom = 40;
   const y = (value: number) => height - bottom - (value - scale.min) / Math.max(scale.max - scale.min, 1e-12) * (height - top - bottom);
   const groupWidth = (width - left - right) / years.length;
   const gap = Math.min(8, groupWidth * 0.05);
@@ -185,12 +189,19 @@ export function renderAnnualReturnChart(parent: HTMLElement, input: AnnualChartS
     svg.appendChild(node);
     return node;
   };
+  const currentIndex = years.indexOf(currentYear);
+  if (currentIndex >= 0) {
+    element("rect", {
+      x: String(left + groupWidth * currentIndex + 2), y: "0", width: String(groupWidth - 4), height: String(height - bottom + 34),
+      rx: "8", class: "investment-tracker-chart-current",
+    });
+  }
   for (const value of scale.ticks) {
     element("line", { x1: String(left), x2: String(width - right), y1: String(y(value)), y2: String(y(value)), class: `investment-tracker-chart-grid${Math.abs(value) < 1e-12 ? " is-zero" : ""}` });
     element("text", { x: String(left - 10), y: String(y(value) + 4), "text-anchor": "end", class: "investment-tracker-chart-axis-label" }).textContent = chartAxisValue(value, { kind: "rate", currency: "USD" });
   }
   years.forEach((year, index) => {
-    element("text", { x: String(left + groupWidth * (index + 0.5)), y: String(height - 16), "text-anchor": "middle", class: "investment-tracker-chart-axis-label" }).textContent = year === currentYear ? `${year} YTD` : String(year);
+    element("text", { x: String(left + groupWidth * (index + 0.5)), y: String(height - 16), "text-anchor": "middle", class: `investment-tracker-chart-axis-label${year === currentYear ? " is-current" : ""}` }).textContent = year === currentYear ? t("{year} so far", { year }) : String(year);
   });
   const tooltip = wrap.createDiv({ cls: "investment-tracker-chart-tooltip" });
   const legend = wrap.createDiv({ cls: "investment-tracker-chart-legend" });
@@ -210,7 +221,7 @@ export function renderAnnualReturnChart(parent: HTMLElement, input: AnnualChartS
       rect.appendChild(title);
       const show = () => {
         tooltip.empty();
-        tooltip.createDiv({ cls: "investment-tracker-chart-tooltip-date", text: year === currentYear ? `${year} YTD` : String(year) });
+        tooltip.createDiv({ cls: "investment-tracker-chart-tooltip-date", text: year === currentYear ? t("{year} so far", { year }) : String(year) });
         tooltip.createDiv({ text: t("{label}: {value}", { label: item.label, value: formatSignedRate(point.amount) }) });
         const box = svg.getBoundingClientRect(), bar = rect.getBoundingClientRect();
         tooltip.style.left = `${Math.min(Math.max(bar.left + bar.width / 2 - box.left, 90), Math.max(box.width - 120, 90))}px`;
@@ -279,12 +290,15 @@ export function renderPerformanceChart(
   const scale = buildChartScale(values, options.kind);
   const minValue = scale.min;
   const maxValue = scale.max;
-  const width = 900;
-  const height = 320;
-  const padLeft = 76;
-  const padRight = 22;
-  const padTop = 22;
-  const padBottom = 48;
+  // Draw at the real container width so labels keep their size on phones.
+  const measured = typeof parent.getBoundingClientRect === "function" ? Math.round(parent.getBoundingClientRect().width) : 0;
+  const width = measured > 200 ? measured : 900;
+  const narrow = width < 520;
+  const height = narrow ? 230 : 300;
+  const padLeft = options.kind === "money" ? (narrow ? 64 : 76) : (narrow ? 44 : 56);
+  const padRight = narrow ? 10 : 18;
+  const padTop = 18;
+  const padBottom = 44;
   const xSpan = Math.max(maxDate - minDate, 1);
   const ySpan = Math.max(maxValue - minValue, 1e-12);
   const xForDate = (date: string) =>
@@ -319,13 +333,20 @@ export function renderPerformanceChart(
   }
 
   const uniqueDates = [...new Set(allPoints.map((point) => point.date))].sort();
-  const tickStep = Math.max(1, Math.ceil(uniqueDates.length / 6));
+  const tickStep = Math.max(1, Math.ceil(uniqueDates.length / (narrow ? 4 : 6)));
+  const lastX = xForDate(uniqueDates.at(-1)!);
+  let previousX = -Infinity;
   uniqueDates.forEach((date, index) => {
-    if (index % tickStep !== 0 && index !== uniqueDates.length - 1) return;
+    const last = index === uniqueDates.length - 1;
+    if (index % tickStep !== 0 && !last) return;
+    // Keep labels apart; the last one is right-aligned so it is never cut off.
+    const x = xForDate(date);
+    if (!last && (lastX - x < 72 || x - previousX < 72)) return;
+    previousX = x;
     const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
     label.setAttribute("x", String(xForDate(date)));
     label.setAttribute("y", String(height - 16));
-    label.setAttribute("text-anchor", "middle");
+    label.setAttribute("text-anchor", last ? "end" : index === 0 ? "start" : "middle");
     label.setAttribute("class", "investment-tracker-chart-axis-label");
     label.textContent = date.slice(0, 7);
     svg.appendChild(label);

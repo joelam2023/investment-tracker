@@ -254,6 +254,230 @@ export class RecordUpdateModal extends PrivacyModal {
   }
 }
 
+export interface RecordAccountOption {
+  accountId: string;
+  name: string;
+  currency: Currency;
+  lastValuation: { date: string; value: number } | null;
+}
+
+type RecordKind = "value" | "contribution" | "withdrawal";
+
+/** "Record an update": pick an account, say what happened, enter the new total. */
+export class RecordEntryModal extends PrivacyModal {
+  private accountId: string;
+  private kind: RecordKind = "value";
+  private effectiveDate = todayLocal();
+  private flowAmount = "";
+  private totalValue = "";
+  private note = "";
+  private saving = false;
+  private error: { field: "amount" | "total" | "date" | null; message: string } | null = null;
+
+  constructor(
+    app: App,
+    private readonly accounts: RecordAccountOption[],
+    accountId: string | null,
+    private readonly onSubmit: (accountId: string, input: RecordUpdateInput) => Promise<void>,
+    private readonly options: { lockAccount?: boolean | undefined; showAmounts?: boolean | undefined; initial?: Partial<RecordUpdateInput> | undefined } = {},
+  ) {
+    super(app);
+    this.accountId = accountId ?? accounts[0]?.accountId ?? "";
+    const initial = options.initial;
+    if (initial?.flowType && initial.flowType !== "none") this.kind = initial.flowType;
+    this.effectiveDate = initial?.effectiveDate ?? this.effectiveDate;
+    this.flowAmount = initial?.flowAmount ?? "";
+    this.totalValue = initial?.totalValue ?? "";
+    this.note = initial?.note ?? "";
+  }
+
+  private get account(): RecordAccountOption | undefined {
+    return this.accounts.find((account) => account.accountId === this.accountId);
+  }
+
+  onOpen(): void {
+    this.modalEl.addClass("investment-tracker-record-modal");
+    this.render();
+  }
+
+  private render(focus?: "amount" | "total" | "date"): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("investment-tracker-modal", "investment-tracker-record");
+    const account = this.account;
+    if (!account) {
+      contentEl.createEl("p", { text: t("Create an account first") });
+      return;
+    }
+    contentEl.createEl("h2", { text: this.options.lockAccount ? t("Record an update · {account}", { account: account.name }) : t("Record an update") });
+
+    if (!this.options.lockAccount && this.accounts.length > 1) {
+      const field = this.field(t("Account"));
+      this.chips(field, this.accounts.map((item) => ({ value: item.accountId, label: item.name })), this.accountId, (value) => {
+        this.accountId = value;
+        this.error = null;
+        this.render();
+      });
+    }
+
+    const kindField = this.field(t("What happened"));
+    this.chips(kindField, [
+      { value: "value", label: t("Update value") },
+      { value: "contribution", label: t("Contribution") },
+      { value: "withdrawal", label: t("Withdrawal") },
+    ], this.kind, (value) => {
+      this.kind = value as RecordKind;
+      this.error = null;
+      this.render(this.kind === "value" ? "total" : "amount");
+    });
+    kindField.createDiv({ cls: "investment-tracker-record-hint", text: this.kind === "value"
+      ? t("Only the market value changed; no money moved in or out.")
+      : t("Stock trades, rebalancing, and dividends retained in the account are not external cash flows.") });
+
+    let amountInput: HTMLInputElement | null = null;
+    if (this.kind !== "value") {
+      const field = this.field(t("Cash-flow amount ({currency})", { currency: account.currency }));
+      amountInput = this.moneyInput(field, this.flowAmount, true, account.currency, (value) => (this.flowAmount = value));
+      this.fieldError(field, "amount");
+    }
+
+    const totalField = this.field(this.kind === "value"
+      ? t("Total account value now ({currency})", { currency: account.currency })
+      : t("Total account value after this ({currency})", { currency: account.currency }));
+    const totalInput = this.moneyInput(totalField, this.totalValue, false, account.currency, (value) => {
+      this.totalValue = value;
+      this.updateChange(change, account);
+    });
+    const reference = totalField.createDiv({ cls: "investment-tracker-record-reference" });
+    const last = account.lastValuation;
+    reference.createSpan({ text: !last
+      ? t("No earlier valuation")
+      : this.options.showAmounts === false
+        ? t("Last updated {date}", { date: formatDate(last.date) })
+        : t("Last: {value} on {date}", { value: new Intl.NumberFormat(getIntlLocale(), { style: "currency", currency: account.currency }).format(last.value), date: formatDate(last.date) }) });
+    const change = reference.createSpan({ cls: "investment-tracker-record-change" });
+    this.updateChange(change, account);
+    this.fieldError(totalField, "total");
+
+    const dateField = this.field(t("Record date"));
+    const dateInput = dateField.createEl("input", { type: "date", cls: "investment-tracker-record-input" });
+    dateInput.value = this.effectiveDate;
+    dateInput.addEventListener("input", () => (this.effectiveDate = dateInput.value));
+    this.fieldError(dateField, "date");
+
+    const noteInput = contentEl.createEl("input", { type: "text", cls: "investment-tracker-record-input investment-tracker-record-note", attr: { placeholder: t("Note (optional)") } });
+    noteInput.value = this.note;
+    noteInput.addEventListener("input", () => (this.note = noteInput.value));
+
+    if (this.error && this.error.field === null) contentEl.createDiv({ cls: "investment-tracker-record-error", text: this.error.message, attr: { role: "alert" } });
+    const save = contentEl.createEl("button", { cls: "mod-cta investment-tracker-record-save", text: this.saving ? t("Saving…") : t("Save") });
+    save.disabled = this.saving;
+    save.addEventListener("click", () => void this.submit());
+    for (const input of [amountInput, totalInput, dateInput, noteInput]) {
+      input?.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") void this.submit();
+      });
+    }
+    const target = focus === "amount" ? amountInput : focus === "date" ? dateInput : focus === "total" ? totalInput : (amountInput ?? totalInput);
+    window.setTimeout(() => target?.focus(), 0);
+  }
+
+  private field(label: string): HTMLElement {
+    const field = this.contentEl.createDiv({ cls: "investment-tracker-record-field" });
+    field.createDiv({ cls: "investment-tracker-record-label", text: label });
+    return field;
+  }
+
+  private chips(parent: HTMLElement, options: Array<{ value: string; label: string }>, current: string, onChange: (value: string) => void): void {
+    const group = parent.createDiv({ cls: "investment-tracker-chips", attr: { role: "radiogroup" } });
+    for (const option of options) {
+      const active = option.value === current;
+      const chip = group.createEl("button", {
+        cls: `investment-tracker-chip${active ? " is-active" : ""}`,
+        text: option.label,
+        attr: { role: "radio", "aria-checked": active ? "true" : "false" },
+      });
+      chip.addEventListener("click", () => onChange(option.value));
+    }
+  }
+
+  private moneyInput(parent: HTMLElement, value: string, positive: boolean, currency: Currency, onInput: (value: string) => void): HTMLInputElement {
+    const input = parent.createEl("input", { cls: "investment-tracker-record-input investment-tracker-record-money" });
+    configureMoneyInput(input, currency, positive);
+    input.placeholder = currencyFractionDigits(currency) === 0 ? "0" : "0.00";
+    input.value = value;
+    input.addEventListener("input", () => onInput(input.value));
+    return input;
+  }
+
+  private fieldError(field: HTMLElement, name: "amount" | "total" | "date"): void {
+    if (this.error?.field !== name) return;
+    field.addClass("has-error");
+    field.createDiv({ cls: "investment-tracker-record-error", text: this.error.message, attr: { role: "alert" } });
+  }
+
+  private updateChange(target: HTMLElement, account: RecordAccountOption): void {
+    target.empty();
+    target.removeClass("investment-tracker-positive", "investment-tracker-negative");
+    const last = account.lastValuation;
+    if (!last || this.options.showAmounts === false || !last.value) return;
+    let total: number, flow = 0;
+    try {
+      total = parseMoneyStrict(this.totalValue.trim(), account.currency);
+      if (this.kind !== "value" && this.flowAmount.trim()) flow = parsePositiveMoneyStrict(this.flowAmount.trim(), account.currency) * (this.kind === "contribution" ? 1 : -1);
+    } catch {
+      return;
+    }
+    const gain = total - last.value - flow;
+    const rate = gain / last.value;
+    if (!Number.isFinite(rate)) return;
+    const percent = new Intl.NumberFormat(getIntlLocale(), { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" }).format(rate);
+    target.setText(t("Gain since last: {value}", { value: percent }));
+    if (gain !== 0) target.addClass(gain > 0 ? "investment-tracker-positive" : "investment-tracker-negative");
+  }
+
+  private async submit(): Promise<void> {
+    const account = this.account;
+    if (!account || this.saving) return;
+    const fail = (field: "amount" | "total" | "date" | null, message: string) => {
+      this.error = { field, message };
+      this.render(field ?? undefined);
+    };
+    if (this.kind !== "value" && !isPositiveAmount(this.flowAmount, account.currency)) {
+      fail("amount", t("Enter a valid positive amount in {currency}", { currency: account.currency }));
+      return;
+    }
+    if (!isNonNegativeAmount(this.totalValue, account.currency)) {
+      fail("total", t("Enter a valid non-negative amount in {currency}", { currency: account.currency }));
+      return;
+    }
+    if (!isIsoDate(this.effectiveDate)) {
+      fail("date", t("Enter a valid date"));
+      return;
+    }
+    this.saving = true;
+    this.error = null;
+    this.render();
+    try {
+      await this.onSubmit(account.accountId, {
+        effectiveDate: this.effectiveDate,
+        flowType: this.kind === "value" ? "none" : this.kind,
+        flowAmount: this.kind === "value" ? "" : this.flowAmount.trim(),
+        totalValue: this.totalValue.trim(),
+        note: this.note.trim(),
+      });
+      this.close();
+    } catch (error) {
+      this.saving = false;
+      fail(null, error instanceof Error ? error.message : t("Could not save the update"));
+    }
+  }
+
+  onClose(): void {
+    this.contentEl.empty();
+  }
+}
+
 export class CorrectEventModal extends PrivacyModal {
   private date: string;
   private amount: string;

@@ -54,11 +54,23 @@ import {
   ConfirmModal,
   CorrectEventModal,
   CreateAccountModal,
-  RecordUpdateModal,
+  RecordEntryModal,
   isCorrectableEvent,
   type CreateAccountInput,
+  type RecordAccountOption,
   type RecordUpdateInput,
 } from "./modals";
+import {
+  accountYearComparison,
+  compareYears,
+  currentYearComparison,
+  lastValuationDates,
+  marketRange,
+  renderAccountList,
+  renderHero,
+  renderYearSection,
+  type HeroInput,
+} from "./home";
 
 export const INVESTMENT_TRACKER_VIEW = "investment-tracker-view";
 const INITIAL_MONTHLY_ROWS = 3;
@@ -143,6 +155,17 @@ export class InvestmentTrackerView extends ItemView {
   private performanceRowsVisible = INITIAL_MONTHLY_ROWS;
   private expandedPerformanceMonth: string | null = null;
   private openingReminderDismissedForSession = false;
+  private longTermMode: "returns" | "assets" = "returns";
+  private longTermRange: "1y" | "3y" | "all" = "all";
+  private lastSnapshot: LedgerSnapshot | null = null;
+  // Index data for the home page, kept until the ledger or date range changes.
+  private homeCache: {
+    key: string;
+    markets: LinkedMarkets | null;
+    benchmark: PerformanceBenchmarkViewData | null;
+    marketsDone: boolean;
+    benchmarkDone: boolean;
+  } | null = null;
   private pendingRecoveryKey: string | null = null;
   private migrationSummary: string | null = null;
   private privacyMaskEpoch = 0;
@@ -733,6 +756,7 @@ export class InvestmentTrackerView extends ItemView {
     }
     if (sequence !== this.renderSequence) return;
     shell.empty();
+    this.lastSnapshot = snapshot;
 
     const account = this.selectedAccountId
       ? snapshot.accounts.find((candidate) => candidate.accountId === this.selectedAccountId)
@@ -851,21 +875,22 @@ export class InvestmentTrackerView extends ItemView {
     }, 0);
   }
 
-  private async renderDashboard(shell: HTMLElement, snapshot: LedgerSnapshot, sequence: number): Promise<void> {
-    const header = shell.createDiv({ cls: "investment-tracker-header" });
-    const titleWrap = header.createDiv();
-    titleWrap.createDiv({ cls: "investment-tracker-eyebrow", text: "Investment Tracker" });
-    titleWrap.createEl("h1", { cls: "investment-tracker-title", text: t("Investment Tracker") });
-    const toolbar = header.createDiv({ cls: "investment-tracker-toolbar" });
-    this.renderPrivacyToggle(toolbar);
-    this.renderLockButton(toolbar);
-    const addButton = toolbar.createEl("button", { cls: "mod-cta investment-tracker-primary-button" });
-    setIcon(addButton.createSpan(), "plus");
-    addButton.createSpan({ cls: "investment-tracker-button-label", text: ` ${t("New account")}` });
-    addButton.addEventListener("click", () => this.openCreateAccount());
-
+  private async renderDashboard(shell: HTMLElement, snapshot: LedgerSnapshot, _sequence: number): Promise<void> {
+    shell.addClass("is-home");
     const activeAccounts = snapshot.accounts.filter((account) => !account.archived);
-    if (activeAccounts.length === 0) {
+    const currencies = SUPPORTED_CURRENCIES.filter((currency) => activeAccounts.some((account) => account.currency === currency));
+    if (!this.selectedAnnualCurrency || !currencies.includes(this.selectedAnnualCurrency)) {
+      this.selectedAnnualCurrency = currencies.includes(this.controller.settings.baseCurrency)
+        ? this.controller.settings.baseCurrency
+        : currencies[0] ?? null;
+    }
+    const currency = this.selectedAnnualCurrency;
+    const lastDates = lastValuationDates(snapshot.events);
+    const scoped = activeAccounts.filter((account) => account.currency === currency);
+    const latest = scoped.map((account) => lastDates.get(account.accountId)).filter((date): date is string => !!date).sort().at(-1) ?? null;
+    this.renderHomeToolbar(shell, latest, scoped.length, currencies, currency);
+
+    if (activeAccounts.length === 0 || !currency) {
       const empty = shell.createDiv({ cls: "investment-tracker-empty" });
       const icon = empty.createDiv();
       setIcon(icon, "landmark");
@@ -879,158 +904,281 @@ export class InvestmentTrackerView extends ItemView {
       return;
     }
 
-    const reminderYear = Number(todayLocal().slice(0, 4));
-    const openingIssues = activeAccounts.flatMap((account) => {
+    const today = todayLocal();
+    const currentYear = Number(today.slice(0, 4));
+    const openingIssues = scoped.flatMap((account) => {
       const row = this.controller.accountAnnualReturns(account, snapshot.events)
-        .find((candidate) => candidate.year === reminderYear && candidate.needsOpeningValuation);
+        .find((candidate) => candidate.year === currentYear && candidate.needsOpeningValuation);
       return row ? [{ account, row }] : [];
     });
     this.renderOpeningReminder(shell, openingIssues);
 
-    const summary = this.controller.portfolioSummary(snapshot);
-    const summaryPeriod = calculateInceptionReturn(snapshot.accounts, snapshot.events, summary.currency);
-    const summaryRate = displayedInceptionRate(summaryPeriod);
-    const summaryCard = shell.createDiv({ cls: "investment-tracker-summary" });
-    summaryCard.createDiv({ cls: "investment-tracker-summary-total-label", text: t("Current total assets") });
-    summaryCard.createDiv({
-      cls: "investment-tracker-summary-total",
-      text: this.financialText(() => formatMoney(summary.currentValue, summary.currency)),
+    const visible = this.financialValuesVisible;
+    const includeNasdaq = this.controller.settings.chartComparisonIds.includes("nasdaq100");
+    const portfolioReport = calculateLinkedReport(snapshot.accounts, snapshot.events, currency, today);
+    const accountReports = scoped.map((account) => calculateLinkedReport(snapshot.accounts, snapshot.events, currency, today, account));
+    const range = marketRange([portfolioReport, ...accountReports]);
+    const performance = this.controller.portfolioMonthlyPerformance(snapshot, currency);
+    const cache = visible && range ? this.ensureHomeData(snapshot, currency, range, performance) : null;
+    const markets: LinkedMarkets = cache?.markets ?? {};
+    const marketState: HeroInput["marketState"] = !visible ? "hidden"
+      : !range ? "unavailable"
+      : !cache?.marketsDone ? "loading"
+      : markets.sp500 || markets.nasdaq100 ? "ready" : "unavailable";
+
+    const years = compareYears(portfolioReport, markets);
+    const metrics = scoped.map((account) => this.controller.accountMetrics(account, snapshot.events));
+    renderHero(shell, {
+      year: currentYear,
+      row: currentYearComparison(years, currentYear),
+      currency,
+      includeNasdaq,
+      visible,
+      marketState,
+      totalValue: metrics.reduce((sum, item) => sum + item.currentValue, 0),
+      cumulativeProfit: metrics.reduce((sum, item) => sum + item.cumulativeProfit, 0),
     });
-    const grid = summaryCard.createDiv({ cls: "investment-tracker-metrics-grid" });
-    renderMetricCard(
-      grid,
-      t("Cumulative net contributions"),
-      this.financialText(() => formatMoney(summary.netContributions, summary.currency)),
-    );
-    const profitTone: FinancialTone = summary.cumulativeProfit > 0
-      ? "positive"
-      : summary.cumulativeProfit < 0
-        ? "negative"
-        : "neutral";
-    renderMetricCard(
-      grid,
-      t("Cumulative profit/loss"),
-      this.financialText(() => formatMoney(summary.cumulativeProfit, summary.currency)),
-      this.financialTone(profitTone),
-    );
-    const xirrTone: FinancialTone = summaryRate !== null && summaryRate > 0
-      ? "positive"
-      : summaryRate !== null && summaryRate < 0
-        ? "negative"
-        : "neutral";
-    renderMetricCard(
-      grid,
-      summaryPeriod.annualizationEligible ? t("Portfolio annualized return") : t("Portfolio period return"),
-      this.financialText(() => formatRate(summaryRate)),
-      this.financialTone(xirrTone),
-      summaryRate === null ? t("Valid cash flows and valuations are required") : summaryPeriod.annualizationEligible ? "XIRR" : t("Not annualized yet"),
-    );
-    renderMetricCard(grid, t("Data as of"), formatDate(summary.asOf));
+    renderYearSection(shell, { rows: years, currentYear, includeNasdaq, visible, marketState });
+    renderAccountList(shell, {
+      items: scoped.map((account, index) => ({
+        account,
+        currentValue: metrics[index]!.currentValue,
+        row: currentYearComparison(compareYears(accountReports[index]!, markets), currentYear),
+        lastValuation: lastDates.get(account.accountId) ?? null,
+      })),
+      today,
+      includeNasdaq,
+      visible,
+      onOpen: (account) => this.showAccount(account.accountId),
+      onUpdate: (account) => this.openRecord(account.accountId),
+      onCreate: () => this.openCreateAccount(),
+    });
+    this.renderLongTerm(shell, snapshot, currency, performance, cache, visible, includeNasdaq);
+    const summaryWarnings = metrics.flatMap((item) => item.warnings);
+    this.renderHomeNotes(shell, markets, cache?.benchmark ?? null, summaryWarnings);
+    if (snapshot.warnings.length > 0) this.renderWarnings(shell, snapshot.warnings);
+  }
 
-    const annualCurrencies = SUPPORTED_CURRENCIES.filter((currency) =>
-      activeAccounts.some((account) => account.currency === currency),
-    );
-    if (!this.selectedAnnualCurrency || !annualCurrencies.includes(this.selectedAnnualCurrency)) {
-      this.selectedAnnualCurrency = annualCurrencies.includes(this.controller.settings.baseCurrency)
-        ? this.controller.settings.baseCurrency
-        : annualCurrencies[0] ?? null;
+  private ensureHomeData(
+    snapshot: LedgerSnapshot,
+    currency: Currency,
+    range: { start: string; end: string },
+    performance: MonthlyPerformanceResult,
+  ): NonNullable<InvestmentTrackerView["homeCache"]> {
+    const latestRecord = snapshot.events.reduce((latest, event) => (event.recordedAt > latest ? event.recordedAt : latest), "");
+    const key = [currency, range.start, range.end, snapshot.events.length, latestRecord].join("|");
+    if (this.homeCache?.key === key) return this.homeCache;
+    const cache: NonNullable<InvestmentTrackerView["homeCache"]> = { key, markets: null, benchmark: null, marketsDone: false, benchmarkDone: false };
+    this.homeCache = cache;
+    const refresh = () => {
+      if (this.homeCache === cache && this.financialValuesVisible && !this.selectedAccountId) this.renderPreservingScroll();
+    };
+    // Only index ids, currency and dates leave the device; amounts stay in the local simulation.
+    void this.controller.loadLinkedMarkets(currency, range.start, range.end, true)
+      .then((markets) => { cache.markets = markets; })
+      .catch(() => { cache.markets = {}; })
+      .finally(() => { cache.marketsDone = true; refresh(); });
+    void this.controller.loadPortfolioPerformanceBenchmark(snapshot, currency, performance)
+      .then((benchmark) => { cache.benchmark = benchmark; })
+      .catch((error) => {
+        console.warn("Investment Tracker long-term benchmark unavailable", error instanceof Error ? error.message : "unknown error");
+      })
+      .finally(() => { cache.benchmarkDone = true; refresh(); });
+    return cache;
+  }
+
+  private renderHomeToolbar(shell: HTMLElement, asOf: string | null, accountCount: number, currencies: Currency[], currency: Currency | null): void {
+    const toolbar = shell.createDiv({ cls: "investment-tracker-home-toolbar" });
+    const info = toolbar.createDiv({ cls: "investment-tracker-home-asof" });
+    if (accountCount > 0) {
+      info.setText([
+        asOf ? t("As of {date}", { date: formatDate(asOf) }) : null,
+        t("{count} accounts", { count: new Intl.NumberFormat(getIntlLocale()).format(accountCount) }),
+        currencies.length > 1 ? null : currency,
+      ].filter(Boolean).join(" · "));
     }
-    const annualRows = this.selectedAnnualCurrency
-      ? this.controller.portfolioAnnualReturns(snapshot, this.selectedAnnualCurrency)
-      : [];
-    this.renderAnnualReturns(shell, t("Portfolio annual returns"), annualRows, [...annualCurrencies]);
+    if (currencies.length > 1 && currency) {
+      this.renderSegmented(toolbar, t("Select portfolio return currency"), currencies.map((value) => ({ value, label: value })), currency, (value) => {
+        this.selectedAnnualCurrency = value;
+        this.renderPreservingScroll();
+      });
+    }
+    this.renderPrivacyToggle(toolbar);
+    this.renderLockButton(toolbar);
+    addIconButton(toolbar, "settings", t("Open settings"), () => this.controller.openSettings());
+    const record = toolbar.createEl("button", { cls: "mod-cta investment-tracker-primary-button" });
+    setIcon(record.createSpan(), "plus");
+    record.createSpan({ cls: "investment-tracker-button-label", text: t("Record") });
+    record.addEventListener("click", () => (accountCount > 0 ? this.openRecord(null) : this.openCreateAccount()));
+  }
 
-    if (this.selectedAnnualCurrency) {
-      const performance = this.controller.portfolioMonthlyPerformance(snapshot, this.selectedAnnualCurrency);
-      const performanceSection = shell.createDiv({ cls: "investment-tracker-section investment-tracker-performance-section" });
-      this.renderPerformanceCenter(
-        performanceSection,
-        performance,
-        snapshot,
-        null,
-        this.financialValuesVisible ? t("Loading S&P 500 data for the same period…") : t("Benchmark and chart are hidden"),
-        annualRows,
-      );
-      if (this.financialValuesVisible) {
-        void this.controller
-          .loadPortfolioPerformanceBenchmark(snapshot, this.selectedAnnualCurrency, performance)
-          .then((loaded) => {
-            if (sequence !== this.renderSequence || !performanceSection.isConnected || !this.financialValuesVisible) return;
-            this.renderPerformanceCenter(
-              performanceSection,
-              loaded.performance,
-              snapshot,
-              null,
-              loaded.result.status === "ok" ? loaded.result.sourceLabel : t("Benchmark unavailable"),
-              annualRows, loaded.benchmarkAnnualReturns, loaded.comparisons, loaded.result,
-            );
-            this.renderWarnings(performanceSection, [...loaded.result.warnings, ...loaded.comparisons.flatMap((item) => item.result.warnings)]);
-          })
-          .catch((error) => {
-            if (sequence !== this.renderSequence || !performanceSection.isConnected) return;
-            console.warn("Investment Tracker portfolio monthly benchmark unavailable", error instanceof Error ? error.message : "unknown error");
-            this.renderPerformanceCenter(performanceSection, performance, snapshot, null, t("Benchmark unavailable"), annualRows);
-          });
-      }
+  private renderSegmented<T extends string>(
+    parent: HTMLElement,
+    label: string,
+    options: Array<{ value: T; label: string }>,
+    current: T,
+    onChange: (value: T) => void,
+  ): void {
+    const group = parent.createDiv({ cls: "investment-tracker-segmented", attr: { role: "group", "aria-label": label } });
+    for (const option of options) {
+      const active = option.value === current;
+      const button = group.createEl("button", {
+        cls: `investment-tracker-segment${active ? " is-active" : ""}`,
+        text: option.label,
+        attr: { "aria-pressed": active ? "true" : "false" },
+      });
+      button.addEventListener("click", () => {
+        if (!active) onChange(option.value);
+      });
+    }
+  }
+
+  private renderLongTerm(
+    shell: HTMLElement,
+    snapshot: LedgerSnapshot,
+    currency: Currency,
+    performance: MonthlyPerformanceResult,
+    cache: InvestmentTrackerView["homeCache"],
+    visible: boolean,
+    includeNasdaq: boolean,
+  ): void {
+    const section = shell.createDiv({ cls: "investment-tracker-section investment-tracker-longterm-section" });
+    const header = section.createDiv({ cls: "investment-tracker-section-header" });
+    const period = calculateInceptionReturn(snapshot.accounts, snapshot.events, currency);
+    const heading = header.createDiv({ cls: "investment-tracker-section-title" });
+    heading.createEl("h2", { text: t("Long-term") });
+    if (period.startDate) heading.createSpan({ cls: "investment-tracker-account-meta", text: t("Since {date}", { date: formatDate(period.startDate) }) });
+    const controls = header.createDiv({ cls: "investment-tracker-segmented-row" });
+    this.renderSegmented(controls, t("Display"), [{ value: "returns", label: t("Returns") }, { value: "assets", label: t("Asset value") }], this.longTermMode, (value) => {
+      this.longTermMode = value;
+      this.renderPreservingScroll();
+    });
+    this.renderSegmented(controls, t("Date range"), [{ value: "1y", label: t("Past year") }, { value: "3y", label: t("Past 3 years") }, { value: "all", label: t("All") }], this.longTermRange, (value) => {
+      this.longTermRange = value;
+      this.renderPreservingScroll();
+    });
+
+    const benchmark = cache?.benchmark ?? null;
+    const pending = visible && !!cache && !cache.benchmarkDone;
+    const annualized = period.annualizationEligible;
+    const stats = section.createDiv({ cls: "investment-tracker-longterm-stats" });
+    const stat = (label: string, rate: number | null, cls: string, isIndex: boolean) => {
+      const item = stats.createDiv({ cls: "investment-tracker-longterm-stat" });
+      const name = item.createDiv({ cls: "investment-tracker-hero-label" });
+      name.createSpan({ cls: `investment-tracker-swatch ${cls}` });
+      name.createSpan({ text: label });
+      item.createDiv({
+        cls: "investment-tracker-longterm-value",
+        text: !visible ? HIDDEN_FINANCIAL_VALUE : isIndex && rate === null && pending ? t("Loading…") : formatSignedRate(rate),
+      });
+    };
+    stat(annualized ? t("My annualized return") : t("My period return"), displayedInceptionRate(period), "is-actual", false);
+    stat(annualized ? t("S&P 500 annualized return") : t("S&P 500 period return"), benchmark ? displayedInceptionRate(period, benchmark.result) : null, "is-benchmark", true);
+    if (includeNasdaq) {
+      const nasdaq = benchmark?.comparisons.find((item) => item.benchmarkId === "nasdaq100")?.result;
+      stat(annualized ? t("Nasdaq-100 annualized return") : t("Nasdaq-100 period return"), nasdaq ? displayedInceptionRate(period, nasdaq) : null, "is-comparison", true);
+    }
+    if (visible && benchmark && benchmark.result.status !== "ok") {
+      section.createDiv({ cls: "investment-tracker-account-meta", text: benchmark.result.warnings.at(-1) ?? t("Benchmark unavailable") });
     }
 
-    const section = shell.createDiv({ cls: "investment-tracker-section" });
-    const sectionHeader = section.createDiv({ cls: "investment-tracker-section-header" });
-    sectionHeader.createEl("h2", { text: t("Investment accounts") });
-    addIconButton(sectionHeader, "settings", t("Open settings"), () => this.controller.openSettings());
-    const accountGrid = section.createDiv({ cls: "investment-tracker-accounts" });
-    for (const account of activeAccounts) {
-      const metrics = this.controller.accountMetrics(account, snapshot.events);
-      const period = calculateInceptionReturn(snapshot.accounts, snapshot.events, account.currency, account);
-      const displayedRate = displayedInceptionRate(period);
-      const card = accountGrid.createDiv({
-        cls: "investment-tracker-account-card",
-        attr: { role: "button", tabindex: "0", "aria-label": t("View {account}", { account: account.name }) },
-      });
-      const accountHeader = card.createDiv({ cls: "investment-tracker-account-header" });
-      accountHeader.createDiv({ cls: "investment-tracker-account-name", text: account.name });
-      accountHeader.createDiv({ cls: "investment-tracker-account-meta", text: account.currency });
-      card.createDiv({
-        cls: "investment-tracker-account-value",
-        text: this.financialText(() => formatMoney(metrics.currentValue, account.currency)),
-      });
-      const footer = card.createDiv({ cls: "investment-tracker-account-footer" });
-      const accountRateTone = this.financialTone(
-        displayedRate === null ? "neutral" : displayedRate >= 0 ? "positive" : "negative",
-      );
-      const rate = footer.createSpan({
-        cls: accountRateTone === "positive"
-          ? "investment-tracker-positive"
-          : accountRateTone === "negative"
-            ? "investment-tracker-negative"
-            : "investment-tracker-account-meta",
-        text: period.annualizationEligible
-          ? t("Annualized {value}", { value: this.financialText(() => formatRate(displayedRate)) })
-          : t("Period return {value}", { value: this.financialText(() => formatRate(displayedRate)) }),
-      });
-      if (displayedRate === null) rate.removeClass("investment-tracker-negative");
-      const update = footer.createEl("button", { cls: "investment-tracker-link-button", text: t("Update returns") });
-      update.addEventListener("click", (event) => {
-        event.stopPropagation();
-        this.openUpdateAccount(account);
-      });
-      const open = () => {
-        this.selectedAccountId = account.accountId;
-        this.historyExpanded = false;
-        this.resetPerformanceUi();
-        void this.render();
+    const chart = section.createDiv({ cls: "investment-tracker-performance-chart" });
+    if (!visible) {
+      chart.createDiv({ cls: "investment-tracker-empty-chart", text: t("Select the eye button to show monthly returns and asset trends") });
+      return;
+    }
+    this.renderTrendChart(chart, benchmark?.performance ?? performance, benchmark?.comparisons ?? []);
+  }
+
+  private renderTrendChart(chart: HTMLElement, performance: MonthlyPerformanceResult, comparisons: PerformanceComparisonViewData[]): void {
+    const count = this.longTermRange === "1y" ? 12 : this.longTermRange === "3y" ? 36 : performance.rows.length;
+    const ranged = performance.rows.slice(-count);
+    if (ranged.length === 0) {
+      chart.createDiv({ cls: "investment-tracker-empty-chart", text: t("There is not enough annual data to chart this range") });
+      return;
+    }
+    const granularity = ranged.length > 48 ? "quarter" : "month";
+    const firstIndex = performance.rows.indexOf(ranged[0]!);
+    const prior = firstIndex > 0 ? performance.rows[firstIndex - 1] : undefined;
+    // Mark only cash flows large enough to explain a visible jump in the lines.
+    const flowMarkers = ranged
+      .filter((row) => row.netFlow !== 0 && row.closingValue !== null && Math.abs(row.netFlow) >= row.closingValue * 0.05)
+      .map((row) => ({ date: row.valuationDate ?? row.endDate, amount: row.netFlow }));
+    const baselineDate = ranged[0]?.startDate;
+
+    if (this.longTermMode === "returns") {
+      const normalize = (value: number, base: number) => (1 + value) / Math.max(1 + base, 1e-12) - 1;
+      const line = (rows: MonthlyPerformanceRow[], base: number, pick: (row: MonthlyPerformanceRow) => number | null): DatedAmount[] => {
+        const points = samplePerformanceRows(rows, granularity, (row) => pick(row) !== null);
+        if (points.length === 0) return [];
+        return [
+          ...(baselineDate ? [{ date: baselineDate, amount: 0 }] : []),
+          ...points.map((row) => ({ date: row.valuationDate ?? row.endDate, amount: normalize(pick(row)!, base) })),
+        ];
       };
-      card.addEventListener("click", open);
-      card.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          open();
-        }
-      });
+      const series: PerformanceChartSeries[] = [
+        { label: t("My cumulative return"), values: line(ranged, prior?.cumulativeReturn ?? 0, (row) => row.cumulativeReturn), className: "is-actual" },
+        { label: t("S&P 500 return for the same period"), values: line(ranged, prior?.benchmarkCumulativeReturn ?? 0, (row) => row.benchmarkCumulativeReturn), className: "is-benchmark" },
+      ];
+      for (const comparison of comparisons) {
+        if (comparison.result.status !== "ok") continue;
+        const rows = comparison.performance.rows.slice(firstIndex, firstIndex + ranged.length);
+        const base = (firstIndex > 0 ? comparison.performance.rows[firstIndex - 1] : undefined)?.benchmarkCumulativeReturn ?? 0;
+        series.push({ label: t("Nasdaq-100 return for the same period"), values: line(rows, base, (row) => row.benchmarkCumulativeReturn), className: "is-comparison" });
+      }
+      renderPerformanceChart(chart, series, { kind: "rate", currency: performance.currency, flowMarkers });
+      return;
     }
 
-    const warnings = [...snapshot.warnings, ...summary.warnings];
-    if (warnings.length > 0) this.renderWarnings(shell, warnings);
+    let cumulativeNetFlow = 0;
+    const netByMonth = new Map<string, number>();
+    for (const row of performance.rows) {
+      cumulativeNetFlow += row.netFlow;
+      netByMonth.set(row.month, cumulativeNetFlow);
+    }
+    const series: PerformanceChartSeries[] = [
+      {
+        label: t("My assets"),
+        values: samplePerformanceRows(ranged, granularity, (row) => row.closingValue !== null)
+          .map((row) => ({ date: row.valuationDate ?? row.endDate, amount: row.closingValue! })),
+        className: "is-actual",
+      },
+      {
+        label: t("Cumulative net contributions"),
+        values: samplePerformanceRows(ranged, granularity).map((row) => ({ date: row.valuationDate ?? row.endDate, amount: netByMonth.get(row.month) ?? 0 })),
+        className: "is-contributions",
+      },
+      {
+        label: t("S&P 500 with matching cash flows"),
+        values: samplePerformanceRows(ranged, granularity, (row) => row.benchmarkValue !== null)
+          .map((row) => ({ date: row.valuationDate ?? row.endDate, amount: row.benchmarkValue! })),
+        className: "is-benchmark",
+      },
+    ];
+    for (const comparison of comparisons) {
+      if (comparison.result.status !== "ok") continue;
+      const rows = comparison.performance.rows.slice(firstIndex, firstIndex + ranged.length);
+      series.push({
+        label: t("Nasdaq-100 with matching cash flows"),
+        values: samplePerformanceRows(rows, granularity, (row) => row.benchmarkValue !== null).map((row) => ({ date: row.valuationDate ?? row.endDate, amount: row.benchmarkValue! })),
+        className: "is-comparison",
+      });
+    }
+    renderPerformanceChart(chart, series, { kind: "money", currency: performance.currency, flowMarkers });
+  }
+
+  private renderHomeNotes(shell: HTMLElement, markets: LinkedMarkets, benchmark: PerformanceBenchmarkViewData | null, warnings: string[]): void {
+    const notes = shell.createEl("details", { cls: "investment-tracker-home-notes" });
+    notes.createEl("summary", { text: t("Calculation notes and data sources") });
+    const lines = new Set([
+      t("Yearly returns use one Modified Dietz calculation per year. Both indices are bought with your same starting value and cash flows on the same dates."),
+      t("Long-term annualized returns use XIRR over every dated contribution and withdrawal (Actual/365)."),
+      ...warnings,
+      ...Object.values(markets).flatMap((market) => market?.warnings ?? []),
+      ...(benchmark?.result.warnings ?? []),
+      ...(benchmark?.comparisons.flatMap((item) => item.result.warnings) ?? []),
+    ]);
+    for (const line of lines) notes.createDiv({ text: line });
   }
 
   private async renderAccount(
@@ -1277,11 +1425,38 @@ export class InvestmentTrackerView extends ItemView {
   }
 
   private openUpdateAccount(account: AccountState, initial?: Partial<RecordUpdateInput>): void {
-    new RecordUpdateModal(this.app, account.name, account.currency, async (input) => {
+    this.openRecord(account.accountId, { lockAccount: true, ...(initial ? { initial } : {}) });
+  }
+
+  private recordOptions(snapshot: LedgerSnapshot): RecordAccountOption[] {
+    return snapshot.accounts.filter((account) => !account.archived).map((account) => {
+      const valuation = snapshot.events
+        .filter((event): event is ValuationEvent => event.type === "valuation" && event.accountId === account.accountId)
+        .sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate) || b.recordedAt.localeCompare(a.recordedAt))[0];
+      return {
+        accountId: account.accountId,
+        name: account.name,
+        currency: account.currency,
+        lastValuation: valuation ? { date: valuation.effectiveDate, value: Number(valuation.totalValue) } : null,
+      };
+    });
+  }
+
+  private openRecord(accountId: string | null, options: { lockAccount?: boolean; initial?: Partial<RecordUpdateInput> | undefined } = {}): void {
+    const snapshot = this.lastSnapshot;
+    if (!snapshot) return;
+    const accounts = this.recordOptions(snapshot);
+    if (accounts.length === 0) {
+      this.openCreateAccount();
+      return;
+    }
+    new RecordEntryModal(this.app, accounts, accountId, async (id, input) => {
+      const account = snapshot.accounts.find((candidate) => candidate.accountId === id);
+      if (!account) throw new Error(t("Unknown account"));
       await this.controller.recordUpdate(account, input);
       new Notice(t("Return record updated"));
       await this.render();
-    }, initial).open();
+    }, { ...options, showAmounts: this.financialValuesVisible }).open();
   }
 
   private renderWarnings(parent: HTMLElement, warnings: string[]): void {

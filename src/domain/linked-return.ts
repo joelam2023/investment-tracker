@@ -14,6 +14,7 @@ export interface LinkedYear {
   partial: boolean;
   moneyWeightedRate?: number | null;
   openingValue?: number;
+  closingValue?: number;
   cashFlows?: ExternalBenchmarkFlow[];
   boundaryEstimates?: Array<{ date: string; sources: string[] }>;
 }
@@ -132,11 +133,15 @@ export function calculateLinkedReport(accounts: AccountState[], events: LedgerEv
     estimatedBoundaries.set(date, [...new Set(sources)].sort());
     return date;
   };
+  // When accounts were last valued on different days, the latest date on which
+  // every account has a real valuation closes the current year instead.
+  const latestAligned = (after: string | null): string | null => [...values.keys()]
+    .filter(date => (!after || date > after) && date <= last && !estimatedBoundaries.has(date)).sort().at(-1) ?? null;
   const years: LinkedYear[] = [];
   for (let year = Number(first.slice(0, 4)); year <= Number(last.slice(0, 4)); year++) {
     const firstYear = year === Number(first.slice(0, 4)), lastYear = year === Number(last.slice(0, 4));
     const start = firstYear ? (values.has(first) ? first : null) : boundary(year);
-    const end = lastYear ? (values.has(last) ? last : null) : boundary(year + 1);
+    const end = lastYear ? (values.has(last) ? last : latestAligned(start)) : boundary(year + 1);
     const eligibilityStart = firstYear ? first : `${year}-01-01`;
     const eligibilityEnd = lastYear ? last : `${year}-12-31`;
     if (eligibilityEnd <= eligibilityStart) continue;
@@ -149,6 +154,7 @@ export function calculateLinkedReport(accounts: AccountState[], events: LedgerEv
     row.moneyWeightedRate = null;
     if (start && end && start < end) {
       row.openingValue = values.get(start)!;
+      row.closingValue = values.get(end)!;
       row.cashFlows = flows.filter(f => f.date > start && f.date <= end);
       row.moneyWeightedRate = moneyWeightedPeriod(row.openingValue, values.get(end)!, row.cashFlows, start, end);
       let factor = 1, previous = start, valid = true;
