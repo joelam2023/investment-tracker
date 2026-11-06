@@ -1,4 +1,4 @@
-import type { BenchmarkResult, Currency, DatedAmount, MarketPoint } from "../types";
+import type { AnnualReturnResult, BenchmarkAnnualReturn, BenchmarkResult, Currency, DatedAmount, MarketBenchmarkId, MarketPoint } from "../types";
 import { calculateXirr } from "../domain/xirr";
 import { t } from "../i18n";
 
@@ -9,6 +9,7 @@ export interface ExternalBenchmarkFlow {
 }
 
 export interface MarketSeries {
+  benchmarkId: MarketBenchmarkId;
   currency: Currency;
   points: MarketPoint[];
   sourceLabel: string;
@@ -22,11 +23,11 @@ export interface CalculatedBenchmark {
   series: DatedAmount[];
 }
 
-function unavailable(sourceLabel: string, warnings: string[]): CalculatedBenchmark {
+function unavailable(benchmarkId: MarketBenchmarkId, sourceLabel: string, warnings: string[]): CalculatedBenchmark {
   return {
     result: {
       status: "unavailable",
-      benchmarkId: "sp500",
+      benchmarkId,
       asOf: null,
       virtualValue: null,
       xirr: null,
@@ -49,6 +50,28 @@ function isStrictDate(value: string): boolean {
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === value;
 }
 
+export function calculateMarketAnnualReturns(
+  periods: AnnualReturnResult[],
+  market: Pick<MarketSeries, "points">,
+): BenchmarkAnnualReturn[] {
+  const points = [...market.points]
+    .filter((point) => isStrictDate(point.date) && Number.isFinite(point.close) && point.close > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  return periods.flatMap((period) => {
+    if (!period.startDate || !period.endDate || period.startDate >= period.endDate) return [];
+    const startDate = period.startDate;
+    const endDate = period.endDate;
+    const opening = startDate === `${period.year}-01-01`
+      ? points.filter((point) => point.date <= startDate).at(-1)
+      : points.find((point) => point.date >= startDate);
+    const closing = points.filter((point) => point.date <= endDate).at(-1);
+    const rate = opening && closing && opening.date < closing.date &&
+      Math.abs(dayDifference(opening.date, startDate)) <= 7 && dayDifference(closing.date, endDate) <= 7
+      ? closing.close / opening.close - 1 : null;
+    return [{ year: period.year, rate: rate !== null && Number.isFinite(rate) ? rate : null, startDate, endDate }];
+  });
+}
+
 export function calculateSameCashFlowBenchmark(
   inputFlows: ExternalBenchmarkFlow[],
   asOf: string,
@@ -58,13 +81,13 @@ export function calculateSameCashFlowBenchmark(
   market: MarketSeries,
 ): CalculatedBenchmark {
   if (market.currency !== expectedCurrency) {
-    return unavailable(market.sourceLabel, [t("Market currency {marketCurrency} does not match account currency {accountCurrency}; calculation stopped", {
+    return unavailable(market.benchmarkId, market.sourceLabel, [t("Market currency {marketCurrency} does not match account currency {accountCurrency}; calculation stopped", {
       marketCurrency: market.currency,
       accountCurrency: expectedCurrency,
     })]);
   }
   if (!isStrictDate(asOf) || !Number.isFinite(actualValue) || actualValue < 0) {
-    return unavailable(market.sourceLabel, [t("Invalid valuation date or amount")]);
+    return unavailable(market.benchmarkId, market.sourceLabel, [t("Invalid valuation date or amount")]);
   }
   if (
     inputFlows.length === 0 ||
@@ -77,16 +100,16 @@ export function calculateSameCashFlowBenchmark(
         (flow.direction !== "contribution" && flow.direction !== "withdrawal"),
     )
   ) {
-    return unavailable(market.sourceLabel, [t("Cash flow contains an invalid amount, date, or direction; benchmark calculation stopped")]);
+    return unavailable(market.benchmarkId, market.sourceLabel, [t("Cash flow contains an invalid amount, date, or direction; benchmark calculation stopped")]);
   }
   const points = [...market.points]
     .filter((point) => point.date <= asOf && Number.isFinite(point.close) && point.close > 0)
     .sort((a, b) => a.date.localeCompare(b.date));
   const flows = [...inputFlows].sort((a, b) => a.date.localeCompare(b.date));
   const warnings = [...market.warnings];
-  if (points.length === 0) return unavailable(market.sourceLabel, [...warnings, t("No benchmark data covers the valuation period")]);
+  if (points.length === 0) return unavailable(market.benchmarkId, market.sourceLabel, [...warnings, t("No benchmark data covers the valuation period")]);
   if (flows.length === 0 || !flows.some((flow) => flow.direction === "contribution")) {
-    return unavailable(market.sourceLabel, [...warnings, t("No contribution records are available for the benchmark simulation")]);
+    return unavailable(market.benchmarkId, market.sourceLabel, [...warnings, t("No contribution records are available for the benchmark simulation")]);
   }
 
   const mapped = flows.map((flow) => ({
@@ -94,12 +117,12 @@ export function calculateSameCashFlowBenchmark(
     point: points.find((point) => point.date >= flow.date && dayDifference(flow.date, point.date) <= 7),
   }));
   if (mapped.some((item) => !item.point)) {
-    return unavailable(market.sourceLabel, [...warnings, t("Benchmark data does not cover one or more cash-flow dates; no interpolation was used")]);
+    return unavailable(market.benchmarkId, market.sourceLabel, [...warnings, t("Benchmark data does not cover one or more cash-flow dates; no interpolation was used")]);
   }
   const endPoint = points.at(-1);
-  if (!endPoint) return unavailable(market.sourceLabel, warnings);
+  if (!endPoint) return unavailable(market.benchmarkId, market.sourceLabel, warnings);
   if (dayDifference(endPoint.date, asOf) > 7) {
-    return unavailable(market.sourceLabel, [...warnings, t("Benchmark data is only available through {date}, more than 7 days before the valuation date", { date: endPoint.date })]);
+    return unavailable(market.benchmarkId, market.sourceLabel, [...warnings, t("Benchmark data is only available through {date}, more than 7 days before the valuation date", { date: endPoint.date })]);
   }
 
   const flowsByTradingDate = new Map<string, ExternalBenchmarkFlow[]>();
@@ -118,7 +141,7 @@ export function calculateSameCashFlowBenchmark(
       const delta = flow.amount / point.close;
       shares += flow.direction === "contribution" ? delta : -delta;
       if (shares < -1e-10) {
-        return unavailable(market.sourceLabel, [...warnings, t("The benchmark portfolio became negative after a withdrawal; comparison cannot continue")]);
+        return unavailable(market.benchmarkId, market.sourceLabel, [...warnings, t("The benchmark portfolio became negative after a withdrawal; comparison cannot continue")]);
       }
       if (Math.abs(shares) < 1e-10) shares = 0;
     }
@@ -135,7 +158,7 @@ export function calculateSameCashFlowBenchmark(
   return {
     result: {
       status: "ok",
-      benchmarkId: "sp500",
+      benchmarkId: market.benchmarkId,
       asOf: endPoint.date,
       virtualValue,
       xirr: benchmarkXirr.value,

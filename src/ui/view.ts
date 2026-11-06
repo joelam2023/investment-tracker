@@ -5,6 +5,9 @@ import type {
   AccountMetrics,
   AccountState,
   BenchmarkResult,
+  BenchmarkAnnualReturn,
+  ChartComparisonId,
+  MarketPoint,
   CashFlowEvent,
   Currency,
   DatedAmount,
@@ -27,6 +30,7 @@ import {
   formatSignedRate,
   renderMetricCard,
   renderPerformanceChart,
+  type PerformanceChartSeries,
   todayLocal,
 } from "./components";
 import {
@@ -39,6 +43,12 @@ import {
 } from "./privacy";
 import { historyDisclosureState } from "./disclosure";
 import { DEFAULT_PERFORMANCE_UI_STATE } from "./performance-defaults";
+import { renderInceptionReturn } from "./inception-return";
+import { calculateLinkedReport, summarizeLinked } from "../domain/linked-return";
+import { renderLinkedReturn, type LinkedMarkets } from "./linked-return";
+import { calculateInceptionReturn, displayedInceptionRate } from "../domain/inception-return";
+import type { YearFilteredReturn } from "../domain/year-filtered-return";
+import type { PeriodComparisons } from "../market/period-comparison";
 import { PRIVACY_MASK_EVENT } from "../security/auto-lock";
 import {
   ConfirmModal,
@@ -67,14 +77,26 @@ export interface PortfolioSummary {
 export interface BenchmarkViewData {
   result: BenchmarkResult;
   series: DatedAmount[];
+  marketPoints: MarketPoint[];
+}
+
+export interface PerformanceComparisonViewData {
+  benchmarkId: ChartComparisonId;
+  result: BenchmarkResult;
+  performance: MonthlyPerformanceResult;
+  annualReturns: BenchmarkAnnualReturn[];
 }
 
 export interface PerformanceBenchmarkViewData {
   performance: MonthlyPerformanceResult;
   result: BenchmarkResult;
+  benchmarkAnnualReturns: BenchmarkAnnualReturn[];
+  comparisons: PerformanceComparisonViewData[];
 }
 
 export interface InvestmentTrackerController {
+  loadLinkedMarkets(currency: Currency, start: string, end: string, showSp500: boolean): Promise<LinkedMarkets>;
+  loadFilteredReturnBenchmarks(filtered: YearFilteredReturn, showSp500: boolean): Promise<PeriodComparisons>;
   settings: PluginSettings;
   loadSnapshot(): Promise<LedgerSnapshot>;
   accountMetrics(account: AccountState, events: LedgerEvent[]): AccountMetrics;
@@ -114,6 +136,8 @@ export class InvestmentTrackerView extends ItemView {
   private selectedAnnualCurrency: Currency | null = null;
   private historyExpanded = false;
   private performanceMode: "returns" | "assets" = DEFAULT_PERFORMANCE_UI_STATE.mode;
+  private performanceReturnView: "linked" | "annualized" | "cumulative" | "annual" = DEFAULT_PERFORMANCE_UI_STATE.returnView;
+  private excludeShortYears = false;
   private performanceGranularity: "month" | "quarter" | "year" = DEFAULT_PERFORMANCE_UI_STATE.granularity;
   private performanceRange: "1y" | "3y" | "all" = DEFAULT_PERFORMANCE_UI_STATE.range;
   private performanceRowsVisible = INITIAL_MONTHLY_ROWS;
@@ -265,6 +289,7 @@ export class InvestmentTrackerView extends ItemView {
     const section = shell.createDiv({ cls: "investment-tracker-section investment-tracker-annual-section" });
     const header = section.createDiv({ cls: "investment-tracker-section-header" });
     header.createEl("h2", { text: title });
+    section.createDiv({ cls: "investment-tracker-account-meta", text: t("Annual money-weighted return uses one Modified Dietz calculation over the displayed period, not linked subperiods or XIRR.") });
     if (currencies && currencies.length > 0) {
       const tabs = header.createDiv({ cls: "investment-tracker-currency-tabs", attr: { role: "group", "aria-label": t("Select portfolio return currency") } });
       for (const currency of currencies) {
@@ -324,6 +349,7 @@ export class InvestmentTrackerView extends ItemView {
 
   private resetPerformanceUi(): void {
     this.performanceMode = DEFAULT_PERFORMANCE_UI_STATE.mode;
+    this.performanceReturnView = DEFAULT_PERFORMANCE_UI_STATE.returnView;
     this.performanceGranularity = DEFAULT_PERFORMANCE_UI_STATE.granularity;
     this.performanceRange = DEFAULT_PERFORMANCE_UI_STATE.range;
     this.performanceRowsVisible = INITIAL_MONTHLY_ROWS;
@@ -376,18 +402,27 @@ export class InvestmentTrackerView extends ItemView {
     return new Date(Date.UTC(year!, value!, 0)).toISOString().slice(0, 10);
   }
 
+  private performanceRangeAnnualReturns(rows: AnnualReturnResult[]): AnnualReturnResult[] {
+    if (this.performanceRange === "all") return rows;
+    return rows.slice(-(this.performanceRange === "1y" ? 1 : 3));
+  }
+
   private renderPerformanceCenter(
     section: HTMLElement,
     performance: MonthlyPerformanceResult,
     snapshot: LedgerSnapshot,
     account: AccountState | null,
     benchmarkLabel: string,
+    annualReturns: AnnualReturnResult[],
+    benchmarkAnnualReturns: BenchmarkAnnualReturn[] = [],
+    comparisons: PerformanceComparisonViewData[] = [],
+    inceptionBenchmark?: BenchmarkResult,
   ): void {
     section.empty();
     const header = section.createDiv({ cls: "investment-tracker-section-header investment-tracker-performance-header" });
     const heading = header.createDiv();
     heading.createEl("h2", { text: t("Assets and benchmark") });
-    heading.createDiv({ cls: "investment-tracker-account-meta", text: benchmarkLabel });
+    heading.createDiv({ cls: "investment-tracker-account-meta", text: [benchmarkLabel, ...comparisons.filter((item) => item.result.status === "ok").map((item) => item.result.sourceLabel)].join(" · ") });
     const controls = section.createDiv({ cls: "investment-tracker-performance-controls" });
     this.renderPerformanceOptions(
       controls,
@@ -399,7 +434,24 @@ export class InvestmentTrackerView extends ItemView {
         this.renderPreservingScroll();
       },
     );
-    this.renderPerformanceOptions(
+    if (this.performanceMode === "returns") this.renderPerformanceOptions(
+      controls, t("Return view"),
+      [{ value: "linked", label: t("Linked annualized return") }, { value: "annualized", label: t("Personal return (XIRR)") }, { value: "cumulative", label: `${t("Cumulative")} (XIRR)` }, { value: "annual", label: t("Annual money-weighted return") }],
+      this.performanceReturnView,
+      (value) => { this.performanceReturnView = value; this.renderPreservingScroll(); },
+    );
+    if (this.performanceMode === "returns" && this.performanceReturnView === "linked") {
+      const group = controls.createDiv({ cls: "investment-tracker-performance-option-group" });
+      const toggle = group.createEl("button", { text: t("Exclude years with no more than six months"),
+        attr: { "aria-pressed": String(this.excludeShortYears) }, cls: `investment-tracker-performance-option${this.excludeShortYears ? " is-active" : ""}` });
+      toggle.addEventListener("click", () => {
+        this.excludeShortYears = !this.excludeShortYears;
+        this.renderPerformanceCenter(section, performance, snapshot, account, benchmarkLabel, annualReturns, benchmarkAnnualReturns, comparisons, inceptionBenchmark);
+        section.querySelector<HTMLButtonElement>('button[data-year-filter]')?.focus({ preventScroll: true });
+      });
+      toggle.setAttribute("data-year-filter", "true");
+    }
+    if (this.performanceMode === "assets" || this.performanceReturnView === "cumulative") this.renderPerformanceOptions(
       controls,
       t("Chart interval"),
       [{ value: "month", label: t("Monthly") }, { value: "quarter", label: t("Quarterly") }, { value: "year", label: t("Yearly") }],
@@ -409,7 +461,7 @@ export class InvestmentTrackerView extends ItemView {
         this.renderPreservingScroll();
       },
     );
-    this.renderPerformanceOptions(
+    if (this.performanceMode === "assets" || (this.performanceReturnView !== "annualized" && this.performanceReturnView !== "linked")) this.renderPerformanceOptions(
       controls,
       t("Date range"),
       [{ value: "1y", label: t("Past year") }, { value: "3y", label: t("Past 3 years") }, { value: "all", label: t("All") }],
@@ -428,7 +480,27 @@ export class InvestmentTrackerView extends ItemView {
       const sampled = samplePerformanceRows(ranged, this.performanceGranularity);
       const firstIndex = performance.rows.indexOf(ranged[0]!);
       const prior = firstIndex > 0 ? performance.rows[firstIndex - 1] : undefined;
-      if (this.performanceMode === "returns") {
+      if (this.performanceMode === "returns" && (this.performanceReturnView === "linked" || this.performanceReturnView === "annual")) {
+        let report = calculateLinkedReport(snapshot.accounts, snapshot.events, performance.currency, todayLocal(), account, this.performanceReturnView === "linked" && this.excludeShortYears);
+        if (this.performanceReturnView === "annual" && this.performanceRange !== "all") {
+          const years = report.years.slice(this.performanceRange === "1y" ? -1 : -3);
+          report = { ...report, years, summary: summarizeLinked(years) };
+        }
+        const annualChart = this.performanceReturnView === "annual";
+        const renderLinked = (markets: LinkedMarkets = {}) => {
+          chart.empty();
+          renderLinkedReturn(chart, report, markets, this.controller.settings.chartComparisonIds.includes("nasdaq100"), annualChart);
+        };
+        renderLinked();
+        const dates = report.years.flatMap(row => [row.start, row.end]).filter((date): date is string => date !== null).sort();
+        const start = dates[0], end = dates.at(-1);
+        if (start && end && start < end) void this.controller.loadLinkedMarkets(performance.currency, start, end, !account || account.benchmarkId !== "none")
+          .then(markets => { if (chart.isConnected && this.financialValuesVisible) renderLinked(markets); })
+          .catch(() => { if (chart.isConnected && this.financialValuesVisible) chart.createDiv({ cls: "investment-tracker-annual-chart-note", text: t("Benchmark unavailable; local returns are unaffected") }); });
+      } else if (this.performanceMode === "returns" && this.performanceReturnView === "annualized") {
+        const period = calculateInceptionReturn(snapshot.accounts, snapshot.events, performance.currency, account);
+        renderInceptionReturn(chart, period, inceptionBenchmark, comparisons.find((item) => item.benchmarkId === "nasdaq100")?.result, this.controller.settings.chartComparisonIds.includes("nasdaq100"));
+      } else if (this.performanceMode === "returns") {
         const actualBase = prior?.cumulativeReturn ?? 0;
         const benchmarkBase = prior?.benchmarkCumulativeReturn ?? 0;
         const normalize = (value: number, base: number) => (1 + value) / Math.max(1 + base, 1e-12) - 1;
@@ -461,10 +533,20 @@ export class InvestmentTrackerView extends ItemView {
             benchmarkValues.push({ date, amount: normalize(row.benchmarkCumulativeReturn, benchmarkBase) });
           }
         }
-        renderPerformanceChart(chart, [
-          { label: t("My cumulative return"), values: actualValues, className: "is-actual" },
+        const chartSeries: PerformanceChartSeries[] = [
+          { label: `${t("My cumulative return")} (XIRR)`, values: actualValues, className: "is-actual" },
           { label: t("S&P 500 return for the same period"), values: benchmarkValues, className: "is-benchmark" },
-        ], {
+        ];
+        for (const comparison of comparisons) {
+          if (comparison.result.status !== "ok") continue;
+          const rows = comparison.performance.rows.slice(firstIndex, firstIndex + ranged.length);
+          const base = (firstIndex > 0 ? comparison.performance.rows[firstIndex - 1] : undefined)?.benchmarkCumulativeReturn ?? 0;
+          const points = samplePerformanceRows(rows, this.performanceGranularity, (row) => row.benchmarkCumulativeReturn !== null);
+          const values: DatedAmount[] = baselineDate && points.length ? [{ date: baselineDate, amount: 0 }] : [];
+          for (const row of points) if (row.benchmarkCumulativeReturn !== null) values.push({ date: row.valuationDate ?? row.endDate, amount: normalize(row.benchmarkCumulativeReturn, base) });
+          chartSeries.push({ label: t("Nasdaq-100 return for the same period"), values, className: "is-comparison" });
+        }
+        renderPerformanceChart(chart, chartSeries, {
           kind: "rate",
           currency: performance.currency,
           flowMarkers: ranged.filter((row) => row.netFlow !== 0).map((row) => ({ date: row.valuationDate ?? row.endDate, amount: row.netFlow })),
@@ -476,7 +558,7 @@ export class InvestmentTrackerView extends ItemView {
           cumulativeNetFlow += row.netFlow;
           netByMonth.set(row.month, cumulativeNetFlow);
         }
-        renderPerformanceChart(chart, [
+        const chartSeries: PerformanceChartSeries[] = [
           {
             label: t("My assets"),
             values: samplePerformanceRows(ranged, this.performanceGranularity, (row) => row.closingValue !== null)
@@ -494,7 +576,13 @@ export class InvestmentTrackerView extends ItemView {
               .map((row) => ({ date: row.valuationDate ?? row.endDate, amount: row.benchmarkValue! })),
             className: "is-benchmark",
           },
-        ], {
+        ];
+        for (const comparison of comparisons) {
+          if (comparison.result.status !== "ok") continue;
+          const rows = comparison.performance.rows.slice(firstIndex, firstIndex + ranged.length);
+          chartSeries.push({ label: t("Nasdaq-100 with matching cash flows"), values: samplePerformanceRows(rows, this.performanceGranularity, (row) => row.benchmarkValue !== null).map((row) => ({ date: row.valuationDate ?? row.endDate, amount: row.benchmarkValue! })), className: "is-comparison" });
+        }
+        renderPerformanceChart(chart, chartSeries, {
           kind: "money",
           currency: performance.currency,
           flowMarkers: ranged.filter((row) => row.netFlow !== 0).map((row) => ({ date: row.valuationDate ?? row.endDate, amount: row.netFlow })),
@@ -800,6 +888,8 @@ export class InvestmentTrackerView extends ItemView {
     this.renderOpeningReminder(shell, openingIssues);
 
     const summary = this.controller.portfolioSummary(snapshot);
+    const summaryPeriod = calculateInceptionReturn(snapshot.accounts, snapshot.events, summary.currency);
+    const summaryRate = displayedInceptionRate(summaryPeriod);
     const summaryCard = shell.createDiv({ cls: "investment-tracker-summary" });
     summaryCard.createDiv({ cls: "investment-tracker-summary-total-label", text: t("Current total assets") });
     summaryCard.createDiv({
@@ -823,17 +913,17 @@ export class InvestmentTrackerView extends ItemView {
       this.financialText(() => formatMoney(summary.cumulativeProfit, summary.currency)),
       this.financialTone(profitTone),
     );
-    const xirrTone: FinancialTone = summary.xirr !== null && summary.xirr > 0
+    const xirrTone: FinancialTone = summaryRate !== null && summaryRate > 0
       ? "positive"
-      : summary.xirr !== null && summary.xirr < 0
+      : summaryRate !== null && summaryRate < 0
         ? "negative"
         : "neutral";
     renderMetricCard(
       grid,
-      t("Portfolio annualized return"),
-      this.financialText(() => formatRate(summary.xirr)),
+      summaryPeriod.annualizationEligible ? t("Portfolio annualized return") : t("Portfolio period return"),
+      this.financialText(() => formatRate(summaryRate)),
       this.financialTone(xirrTone),
-      summary.xirr === null ? t("Valid cash flows and valuations are required") : "XIRR",
+      summaryRate === null ? t("Valid cash flows and valuations are required") : summaryPeriod.annualizationEligible ? "XIRR" : t("Not annualized yet"),
     );
     renderMetricCard(grid, t("Data as of"), formatDate(summary.asOf));
 
@@ -859,6 +949,7 @@ export class InvestmentTrackerView extends ItemView {
         snapshot,
         null,
         this.financialValuesVisible ? t("Loading S&P 500 data for the same period…") : t("Benchmark and chart are hidden"),
+        annualRows,
       );
       if (this.financialValuesVisible) {
         void this.controller
@@ -871,12 +962,14 @@ export class InvestmentTrackerView extends ItemView {
               snapshot,
               null,
               loaded.result.status === "ok" ? loaded.result.sourceLabel : t("Benchmark unavailable"),
+              annualRows, loaded.benchmarkAnnualReturns, loaded.comparisons, loaded.result,
             );
+            this.renderWarnings(performanceSection, [...loaded.result.warnings, ...loaded.comparisons.flatMap((item) => item.result.warnings)]);
           })
           .catch((error) => {
             if (sequence !== this.renderSequence || !performanceSection.isConnected) return;
             console.warn("Investment Tracker portfolio monthly benchmark unavailable", error instanceof Error ? error.message : "unknown error");
-            this.renderPerformanceCenter(performanceSection, performance, snapshot, null, t("Benchmark unavailable"));
+            this.renderPerformanceCenter(performanceSection, performance, snapshot, null, t("Benchmark unavailable"), annualRows);
           });
       }
     }
@@ -888,6 +981,8 @@ export class InvestmentTrackerView extends ItemView {
     const accountGrid = section.createDiv({ cls: "investment-tracker-accounts" });
     for (const account of activeAccounts) {
       const metrics = this.controller.accountMetrics(account, snapshot.events);
+      const period = calculateInceptionReturn(snapshot.accounts, snapshot.events, account.currency, account);
+      const displayedRate = displayedInceptionRate(period);
       const card = accountGrid.createDiv({
         cls: "investment-tracker-account-card",
         attr: { role: "button", tabindex: "0", "aria-label": t("View {account}", { account: account.name }) },
@@ -901,7 +996,7 @@ export class InvestmentTrackerView extends ItemView {
       });
       const footer = card.createDiv({ cls: "investment-tracker-account-footer" });
       const accountRateTone = this.financialTone(
-        metrics.xirr === null ? "neutral" : metrics.xirr >= 0 ? "positive" : "negative",
+        displayedRate === null ? "neutral" : displayedRate >= 0 ? "positive" : "negative",
       );
       const rate = footer.createSpan({
         cls: accountRateTone === "positive"
@@ -909,9 +1004,11 @@ export class InvestmentTrackerView extends ItemView {
           : accountRateTone === "negative"
             ? "investment-tracker-negative"
             : "investment-tracker-account-meta",
-        text: t("Annualized {value}", { value: this.financialText(() => formatRate(metrics.xirr)) }),
+        text: period.annualizationEligible
+          ? t("Annualized {value}", { value: this.financialText(() => formatRate(displayedRate)) })
+          : t("Period return {value}", { value: this.financialText(() => formatRate(displayedRate)) }),
       });
-      if (metrics.xirr === null) rate.removeClass("investment-tracker-negative");
+      if (displayedRate === null) rate.removeClass("investment-tracker-negative");
       const update = footer.createEl("button", { cls: "investment-tracker-link-button", text: t("Update returns") });
       update.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -963,6 +1060,8 @@ export class InvestmentTrackerView extends ItemView {
     updateButton.addEventListener("click", () => this.openUpdateAccount(account));
 
     const metrics = this.controller.accountMetrics(account, snapshot.events);
+    const accountPeriod = calculateInceptionReturn(snapshot.accounts, snapshot.events, account.currency, account);
+    const accountRate = displayedInceptionRate(accountPeriod);
     const summaryCard = shell.createDiv({ cls: "investment-tracker-summary" });
     summaryCard.createDiv({ cls: "investment-tracker-summary-total-label", text: t("Current assets") });
     summaryCard.createDiv({
@@ -986,17 +1085,17 @@ export class InvestmentTrackerView extends ItemView {
       this.financialText(() => formatMoney(metrics.cumulativeProfit, account.currency)),
       this.financialTone(profitTone),
     );
-    const xirrTone: FinancialTone = metrics.xirr === null
+    const xirrTone: FinancialTone = accountRate === null
       ? "neutral"
-      : metrics.xirr >= 0
+      : accountRate >= 0
         ? "positive"
         : "negative";
     renderMetricCard(
       grid,
-      t("My annualized return"),
-      this.financialText(() => formatRate(metrics.xirr)),
+      accountPeriod.annualizationEligible ? t("My annualized return") : t("My period return"),
+      this.financialText(() => formatRate(accountRate)),
       this.financialTone(xirrTone),
-      metrics.xirrStatus === "ok" ? "XIRR" : t("Insufficient current data"),
+      accountRate === null ? t("Insufficient current data") : accountPeriod.annualizationEligible ? "XIRR" : t("Not annualized yet"),
     );
     const benchmarkMetric = renderMetricCard(
       grid,
@@ -1030,6 +1129,7 @@ export class InvestmentTrackerView extends ItemView {
       snapshot,
       account,
       this.financialValuesVisible ? t("Loading S&P 500 data for the same period…") : t("Benchmark and chart are hidden"),
+      accountAnnualRows,
     );
     if (this.financialValuesVisible) {
       void this.controller
@@ -1042,16 +1142,19 @@ export class InvestmentTrackerView extends ItemView {
           ) return;
           const valueEl = benchmarkMetric.querySelector(".investment-tracker-metric-value");
           const hintEl = benchmarkMetric.querySelector(".investment-tracker-metric-hint");
-          if (valueEl) valueEl.textContent = this.financialText(() => formatRate(loaded.result.xirr));
+          const benchmarkRate = displayedInceptionRate(accountPeriod, loaded.result);
+          if (valueEl) valueEl.textContent = this.financialText(() => formatRate(benchmarkRate));
           if (hintEl) {
-            hintEl.textContent = loaded.result.status === "ok"
-              ? t("Excess {value}", { value: this.financialText(() => formatSignedRate(loaded.result.excessRate)) })
-              : t("Benchmark unavailable; local returns are unaffected");
+            hintEl.textContent = loaded.result.status !== "ok"
+              ? t("Benchmark unavailable; local returns are unaffected")
+              : !accountPeriod.annualizationEligible ? t("Not annualized yet")
+              : t("Excess {value}", { value: this.financialText(() => formatSignedRate(loaded.result.excessRate)) });
           }
           benchmarkMetric.removeClass("is-neutral", "is-positive", "is-negative");
-          const benchmarkTone: FinancialTone = loaded.result.excessRate === null
+          const excessRate = accountRate !== null && benchmarkRate !== null ? accountRate - benchmarkRate : null;
+          const benchmarkTone: FinancialTone = excessRate === null
             ? "neutral"
-            : loaded.result.excessRate >= 0
+            : excessRate >= 0
               ? "positive"
               : "negative";
           benchmarkMetric.addClass(`is-${this.financialTone(benchmarkTone)}`);
@@ -1061,8 +1164,9 @@ export class InvestmentTrackerView extends ItemView {
             snapshot,
             account,
             loaded.result.status === "ok" ? loaded.result.sourceLabel : t("Benchmark unavailable"),
+            accountAnnualRows, loaded.benchmarkAnnualReturns, loaded.comparisons, loaded.result,
           );
-          if (loaded.result.warnings.length > 0) this.renderWarnings(performanceSection, loaded.result.warnings);
+          this.renderWarnings(performanceSection, [...loaded.result.warnings, ...loaded.comparisons.flatMap((item) => item.result.warnings)]);
         })
         .catch((error) => {
           if (
@@ -1074,7 +1178,7 @@ export class InvestmentTrackerView extends ItemView {
           const hintEl = benchmarkMetric.querySelector(".investment-tracker-metric-hint");
           if (valueEl) valueEl.textContent = "—";
           if (hintEl) hintEl.textContent = t("Benchmark unavailable; local returns are unaffected");
-          this.renderPerformanceCenter(performanceSection, performance, snapshot, account, t("Benchmark unavailable"));
+          this.renderPerformanceCenter(performanceSection, performance, snapshot, account, t("Benchmark unavailable"), accountAnnualRows);
           console.warn("Investment Tracker benchmark unavailable", error instanceof Error ? error.message : "unknown error");
         });
     }

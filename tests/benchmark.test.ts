@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateSameCashFlowBenchmark, type MarketSeries } from "../src/market/benchmark";
-import { mergeCompatibleMarketSeries, parseManualMarketCsv } from "../src/market/cache";
+import { calculateMarketAnnualReturns, calculateSameCashFlowBenchmark, type MarketSeries } from "../src/market/benchmark";
+import type { AnnualReturnResult } from "../src/types";
+import { MarketCacheStore, mergeCompatibleMarketSeries, parseManualMarketCsv } from "../src/market/cache";
+import { TFile } from "obsidian";
+import type { Vault } from "obsidian";
 import { parseFredCsv } from "../src/market/fred-provider";
 
 const market: MarketSeries = {
+  benchmarkId: "sp500",
   currency: "USD",
   points: [
     { date: "2024-01-05", close: 100 },
@@ -127,4 +131,37 @@ test("compatible cache updates merge dates instead of erasing long history", () 
   };
   const merged = mergeCompatibleMarketSeries(prior, next);
   assert.deepEqual(merged.points.map((point) => point.date), ["2020-01-02", "2025-01-06"]);
+});
+
+test("benchmark annual rates use prior trading close at the calendar boundary", () => {
+  const row: AnnualReturnResult = { year: 2024, rate: 0.2, startDate: "2024-01-01", endDate: "2024-12-31", period: "full-year", quality: "complete", status: "ok", needsOpeningValuation: false, details: [] };
+  const result = calculateMarketAnnualReturns([row], { points: [
+    { date: "2023-12-29", close: 100 }, { date: "2024-01-02", close: 150 }, { date: "2024-12-31", close: 120 },
+  ] });
+  assert.ok(Math.abs(result[0]!.rate! - 0.2) < 1e-12);
+  assert.equal(calculateMarketAnnualReturns([row], { points: [{ date: "2024-01-02", close: 150 }, { date: "2024-12-31", close: 120 }] })[0]?.rate, null);
+});
+test("benchmark partial annual rates use the actual period and reject stale boundaries", () => {
+  const row: AnnualReturnResult = { year: 2024, rate: 0.2, startDate: "2024-08-01", endDate: "2024-12-31", period: "partial-year", quality: "partial", status: "ok", needsOpeningValuation: false, details: [] };
+  assert.ok(Math.abs(calculateMarketAnnualReturns([row], { points: [{ date: "2024-08-02", close: 100 }, { date: "2024-12-31", close: 120 }] })[0]!.rate! - 0.2) < 1e-12);
+  assert.equal(calculateMarketAnnualReturns([row], { points: [{ date: "2024-08-10", close: 100 }, { date: "2024-12-31", close: 120 }] })[0]?.rate, null);
+});
+test("different benchmark identities are never merged", () => {
+  const nasdaq: MarketSeries = { ...market, benchmarkId: "nasdaq100", points: [{ date: "2025-01-06", close: 999 }] };
+  assert.equal(mergeCompatibleMarketSeries(market, nasdaq), nasdaq);
+  assert.equal(calculateSameCashFlowBenchmark([{ date: "2024-01-05", direction: "contribution", amount: 100 }], "2025-01-06", 100, null, "USD", { ...market, benchmarkId: "nasdaq100" }).result.benchmarkId, "nasdaq100");
+});
+
+test("cache schema 1 remains S&P-only and schema 2 validates benchmark identity", async () => {
+  let payload: unknown = { schemaVersion: 1, ...market };
+  const file = new TFile();
+  const vault = { getAbstractFileByPath: () => file, cachedRead: async () => JSON.stringify(payload) } as unknown as Vault;
+  const cache = new MarketCacheStore(vault, "synthetic-cache");
+  assert.equal((await cache.load("USD", "sp500"))?.benchmarkId, "sp500");
+  await assert.rejects(cache.load("USD", "nasdaq100"), /Invalid market data source/);
+  payload = { schemaVersion: 2, ...market, benchmarkId: "nasdaq100", origin: "automatic" };
+  assert.equal((await cache.load("USD", "nasdaq100"))?.benchmarkId, "nasdaq100");
+  await assert.rejects(cache.load("USD", "sp500"), /Invalid market data source/);
+  payload = { schemaVersion: 2, ...market, benchmarkId: "other" };
+  await assert.rejects(cache.load(), /Invalid market data source/);
 });

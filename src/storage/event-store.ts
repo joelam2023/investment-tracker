@@ -739,8 +739,8 @@ export class LedgerEventStore {
     return result.writtenIds.length;
   }
 
-  getMarketCachePath(currency: Currency): string {
-    return normalizePath(`${this.basePath}/market-cache/sp500-${currency.toLowerCase()}.json`);
+  getMarketCachePath(benchmarkId: "sp500" | "nasdaq100", currency: Currency): string {
+    return normalizePath(`${this.basePath}/market-cache/${benchmarkId}-${currency.toLowerCase()}.json`);
   }
 
   private async writeExport(fileName: string, content: string): Promise<string> {

@@ -6,6 +6,12 @@ await rm("test-dist", { recursive: true, force: true });
 
 await esbuild.build({
   entryPoints: [
+    "tests/annual-boundary.test.ts",
+    "tests/linked-return.test.ts",
+    "tests/year-filtered-return.test.ts",
+    "tests/year-filter-ui.test.ts",
+    "tests/inception-return.test.ts",
+    "tests/annual-compound.test.ts",
     "tests/calculations.test.ts",
     "tests/events.test.ts",
     "tests/benchmark.test.ts",

@@ -5,8 +5,12 @@ import {
   findExchangeRateAtOrBefore,
   FRED_CURRENCY_CONFIG,
   MAX_FX_AGE_DAYS,
+  FRED_BENCHMARKS,
+  fredMarketMetadata,
+  FredBenchmarkProvider,
 } from "../src/market/fred-provider";
 import { SUPPORTED_CURRENCIES } from "../src/types";
+import { setTestRequestHandler } from "./obsidian-stub";
 
 test("FRED currency configuration covers every supported currency with an explicit quote direction", () => {
   assert.deepEqual(Object.keys(FRED_CURRENCY_CONFIG), [...SUPPORTED_CURRENCIES]);
@@ -62,4 +66,33 @@ test("exchange-rate lookup rejects invalid dates, rates, and age limits", () => 
   assert.equal(findExchangeRateAtOrBefore([{ date: "2025-02-28", close: Number.NaN }], "2025-03-01"), undefined);
   assert.equal(findExchangeRateAtOrBefore([{ date: "2025-02-28", close: 1.2 }], "not-a-date"), undefined);
   assert.equal(findExchangeRateAtOrBefore([{ date: "2025-02-28", close: 1.2 }], "2025-03-01", -1), undefined);
+});
+
+test("both FRED benchmark identities have independent metadata", () => {
+  assert.equal(FRED_BENCHMARKS.sp500.seriesId, "SP500");
+  assert.equal(FRED_BENCHMARKS.nasdaq100.seriesId, "NASDAQ100");
+  const nasdaq = fredMarketMetadata("USD", "nasdaq100");
+  assert.match(nasdaq.sourceLabel, /Nasdaq-100/);
+  assert.ok(nasdaq.warnings.some((warning) => warning.includes("excludes dividends")));
+  assert.ok(nasdaq.warnings.some((warning) => warning.includes("non-commercial")));
+});
+
+test("automatic Nasdaq fetch keeps prior-year closing data and sends only public GET parameters", async () => {
+  const requests: Record<string, unknown>[] = [];
+  setTestRequestHandler(async (params) => {
+    requests.push(params);
+    return { status: 200, text: "observation_date,NASDAQ100\n2023-12-29,100\n2024-01-02,150\n2024-12-31,120\n" };
+  });
+  try {
+    const market = await new FredBenchmarkProvider().fetch("nasdaq100", "USD", "2024-01-01", "2024-12-31");
+    assert.equal(market.benchmarkId, "nasdaq100");
+    assert.equal(market.points[0]?.date, "2023-12-29");
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]!.method, "GET");
+    assert.equal("body" in requests[0]!, false);
+    const url = new URL(String(requests[0]!.url));
+    assert.equal(url.origin, "https://fred.stlouisfed.org");
+    assert.deepEqual([...url.searchParams.keys()].sort(), ["coed", "cosd", "id"]);
+    assert.equal(url.searchParams.get("id"), "NASDAQ100");
+  } finally { setTestRequestHandler(null); }
 });

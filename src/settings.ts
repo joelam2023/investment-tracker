@@ -1,5 +1,5 @@
 import { normalizePath } from "obsidian";
-import type { Currency, LanguageSetting, PluginSettings } from "./types";
+import type { ChartComparisonId, Currency, LanguageSetting, PluginSettings } from "./types";
 import { DEFAULT_SETTINGS, SUPPORTED_CURRENCIES, SUPPORTED_LOCALES } from "./types";
 import { hasAutomaticLockRule, isAutoLockMinutes } from "./security/auto-lock";
 
@@ -33,15 +33,19 @@ export function parseSettings(value: unknown, initialCurrency: Currency = DEFAUL
   const autoLockMinutes = isAutoLockMinutes(record.autoLockMinutes)
     ? record.autoLockMinutes
     : DEFAULT_SETTINGS.autoLockMinutes;
+  const chartComparisonIds: ChartComparisonId[] = Array.isArray(record.chartComparisonIds)
+    ? (record.chartComparisonIds.includes("nasdaq100") ? ["nasdaq100"] : [])
+    : [...DEFAULT_SETTINGS.chartComparisonIds];
   return {
     ...DEFAULT_SETTINGS,
     baseCurrency,
     language,
     marketMode: record.marketMode === "manual" ? "manual" : "automatic",
     benchmarkId: record.benchmarkId === "none" ? "none" : "sp500",
+    chartComparisonIds,
     dataPath: parseDataPath(record.dataPath),
     lockOnLeave: hasAutomaticLockRule(requestedLockOnLeave, autoLockMinutes) ? requestedLockOnLeave : true,
     autoLockMinutes,
-    schemaVersion: 4,
+    schemaVersion: 5,
   };
 }

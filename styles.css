@@ -408,6 +408,36 @@
   stroke: var(--text-muted);
 }
 
+.investment-tracker-chart-point.is-comparison {
+  stroke: var(--color-purple);
+}
+
+.investment-tracker-chart-bar {
+  cursor: pointer;
+  opacity: 0.88;
+  transition: opacity 120ms ease;
+}
+
+.investment-tracker-chart-bar:hover,
+.investment-tracker-chart-bar:focus-visible {
+  opacity: 1;
+  outline: none;
+  stroke: var(--text-normal);
+  stroke-width: 2;
+}
+
+.investment-tracker-chart-bar.is-actual {
+  fill: var(--interactive-accent);
+}
+
+.investment-tracker-chart-bar.is-benchmark {
+  fill: var(--text-muted);
+}
+
+.investment-tracker-chart-bar.is-comparison {
+  fill: var(--color-purple);
+}
+
 .investment-tracker-chart-line.is-contributions,
 .investment-tracker-chart-point.is-contributions,
 .investment-tracker-chart-dot.is-contributions {
@@ -417,8 +447,16 @@
 }
 
 .investment-tracker-chart-line.is-hidden,
-.investment-tracker-chart-point.is-hidden {
+.investment-tracker-chart-point.is-hidden,
+.investment-tracker-chart-bar.is-hidden {
   display: none;
+}
+
+.investment-tracker-annual-chart-note {
+  margin: 8px 4px 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.45;
 }
 
 .investment-tracker-flow-marker {
@@ -780,8 +818,16 @@
   stroke-dasharray: 8 8;
 }
 
+.investment-tracker-chart-line.is-comparison,
+.investment-tracker-chart-dot.is-comparison {
+  stroke: var(--color-purple);
+  background: var(--color-purple);
+  stroke-dasharray: 3 7;
+}
+
 .investment-tracker-chart-legend {
   display: flex;
+  flex-wrap: wrap;
   gap: 18px;
   margin-top: 8px;
   color: var(--text-muted);
@@ -1026,3 +1072,5 @@
     min-width: 520px;
   }
 }
+
+.investment-tracker-compound-metrics { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); margin: 16px 0; }

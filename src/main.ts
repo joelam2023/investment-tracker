@@ -5,6 +5,7 @@ import type {
   AccountMetrics,
   AccountState,
   BenchmarkResult,
+  MarketBenchmarkId,
   CashFlowEvent,
   Currency,
   EventVoidedEvent,
@@ -16,6 +17,10 @@ import type {
   ValuationEvent,
 } from "./types";
 import { DEFAULT_SETTINGS } from "./types";
+import { calculateLinkedReport, moneyWeightedAnnualRows } from "./domain/linked-return";
+import type { LinkedMarkets } from "./ui/linked-return";
+import type { YearFilteredReturn } from "./domain/year-filtered-return";
+import { loadPeriodComparisons, type PeriodComparisons } from "./market/period-comparison";
 import { parseSettings } from "./settings";
 import { normalizeMoney, parseMoneyStrict } from "./domain/money";
 import {
@@ -30,8 +35,8 @@ import {
   calculatePortfolioMonthlyPerformance,
 } from "./domain/monthly-performance";
 import { LedgerEventStore } from "./storage/event-store";
-import { calculateSameCashFlowBenchmark, type MarketSeries } from "./market/benchmark";
-import { FredSp500Provider } from "./market/fred-provider";
+import { calculateMarketAnnualReturns, calculateSameCashFlowBenchmark, type ExternalBenchmarkFlow, type MarketSeries } from "./market/benchmark";
+import { FredBenchmarkProvider } from "./market/fred-provider";
 import { MarketCacheStore, parseManualMarketCsv } from "./market/cache";
 import {
   INVESTMENT_TRACKER_VIEW,
@@ -39,6 +44,7 @@ import {
   type BenchmarkViewData,
   type PerformanceBenchmarkViewData,
   type PortfolioSummary,
+  type PerformanceComparisonViewData,
 } from "./ui/view";
 import { InvestmentTrackerSettingTab } from "./ui/settings";
 import type { CreateAccountInput, RecordUpdateInput } from "./ui/modals";
@@ -72,10 +78,10 @@ function timestampWithOffset(base: number, offset: number): string {
   return new Date(base + offset).toISOString();
 }
 
-function unavailableBenchmark(message: string, sourceLabel = "S&P 500 Price Index · FRED"): BenchmarkViewData {
+function unavailableBenchmark(message: string, sourceLabel = "S&P 500 Price Index · FRED", benchmarkId: MarketBenchmarkId = "sp500"): BenchmarkViewData {
   const result: BenchmarkResult = {
     status: "unavailable",
-    benchmarkId: "sp500",
+    benchmarkId,
     asOf: null,
     virtualValue: null,
     xirr: null,
@@ -84,7 +90,7 @@ function unavailableBenchmark(message: string, sourceLabel = "S&P 500 Price Inde
     sourceLabel,
     warnings: [message],
   };
-  return { result, series: [] };
+  return { result, series: [], marketPoints: [] };
 }
 
 function cacheCovers(series: MarketSeries, start: string, asOf: string): boolean {
@@ -100,7 +106,7 @@ function cacheCovers(series: MarketSeries, start: string, asOf: string): boolean
 export default class InvestmentTrackerPlugin extends Plugin {
   settings: PluginSettings = { ...DEFAULT_SETTINGS };
   private store!: LedgerEventStore;
-  private readonly fredProvider = new FredSp500Provider();
+  private readonly fredProvider = new FredBenchmarkProvider();
   private autoLockTimer: number | null = null;
   private activeLeafWasInvestmentTracker = false;
   private lockEpoch = 0;
@@ -301,7 +307,7 @@ export default class InvestmentTrackerPlugin extends Plugin {
   }
 
   accountAnnualReturns(account: AccountState, events: LedgerEvent[]): AnnualReturnResult[] {
-    return calculateAccountAnnualReturns(account, events, todayLocal());
+    return moneyWeightedAnnualRows(calculateLinkedReport([account], events, account.currency, todayLocal(), account));
   }
 
   portfolioSummary(snapshot: LedgerSnapshot): PortfolioSummary {
@@ -309,7 +315,7 @@ export default class InvestmentTrackerPlugin extends Plugin {
   }
 
   portfolioAnnualReturns(snapshot: LedgerSnapshot, currency: Currency): AnnualReturnResult[] {
-    return calculatePortfolioAnnualReturns(snapshot.accounts, snapshot.events, currency, todayLocal());
+    return moneyWeightedAnnualRows(calculateLinkedReport(snapshot.accounts, snapshot.events, currency, todayLocal()));
   }
 
   accountMonthlyPerformance(account: AccountState, events: LedgerEvent[]): MonthlyPerformanceResult {
@@ -446,16 +452,17 @@ export default class InvestmentTrackerPlugin extends Plugin {
   }
 
   private async loadMarketSeries(
+    benchmarkId: MarketBenchmarkId,
     currency: Currency,
     start: string,
     asOf: string,
   ): Promise<{ market: MarketSeries | null; warning: string | null }> {
-    const cache = new MarketCacheStore(this.app.vault, this.store.getMarketCachePath(currency));
+    const cache = new MarketCacheStore(this.app.vault, this.store.getMarketCachePath(benchmarkId, currency));
     let market: MarketSeries | null = null;
     let fetchWarning: string | null = null;
     let cached: MarketSeries | null = null;
     try {
-      cached = await cache.load(currency);
+      cached = await cache.load(currency, benchmarkId);
     } catch (error) {
       fetchWarning = error instanceof Error
         ? t("Unable to read market cache: {message}", { message: error.message })
@@ -470,7 +477,7 @@ export default class InvestmentTrackerPlugin extends Plugin {
         market = cached;
       } else {
         try {
-          market = await this.fredProvider.fetch(currency, start, asOf);
+          market = await this.fredProvider.fetch(benchmarkId, currency, start, asOf);
           fetchWarning = null;
         } catch (error) {
           fetchWarning = error instanceof Error
@@ -497,13 +504,26 @@ export default class InvestmentTrackerPlugin extends Plugin {
     return { market, warning: fetchWarning };
   }
 
+  async loadLinkedMarkets(currency: Currency, start: string, end: string, showSp500: boolean): Promise<LinkedMarkets> {
+    const ids: MarketBenchmarkId[] = [...(showSp500 ? ["sp500" as const] : []), ...this.settings.chartComparisonIds];
+    return Object.fromEntries(await Promise.all(ids.map(async id => {
+      try { return [id, (await this.loadMarketSeries(id, currency, start, end)).market]; }
+      catch { return [id, null]; }
+    })));
+  }
+
+  async loadFilteredReturnBenchmarks(filtered: YearFilteredReturn, showSp500: boolean): Promise<PeriodComparisons> {
+    const ids: MarketBenchmarkId[] = [...(showSp500 ? ["sp500" as const] : []), ...this.settings.chartComparisonIds];
+    return loadPeriodComparisons(filtered, ids, (id, currency, start, end) => this.loadMarketSeries(id, currency, start, end));
+  }
+
   async loadBenchmark(account: AccountState, events: LedgerEvent[], metrics: AccountMetrics): Promise<BenchmarkViewData> {
     if (account.benchmarkId === "none") return unavailableBenchmark(t("This account has no comparison benchmark"), t("No benchmark selected"));
     if (!metrics.asOf) return unavailableBenchmark(t("At least one asset valuation is required"));
     const flows = events
       .filter(
         (event): event is CashFlowEvent =>
-          event.type === "cash-flow" && event.accountId === account.accountId && event.effectiveDate <= metrics.asOf!,
+          event.type === "cash-flow" && event.accountId === account.accountId && event.currency === account.currency && event.effectiveDate <= metrics.asOf!,
       )
       .map((event) => ({
         date: event.effectiveDate,
@@ -513,12 +533,12 @@ export default class InvestmentTrackerPlugin extends Plugin {
     const start = [...flows].sort((a, b) => a.date.localeCompare(b.date))[0]?.date;
     if (!start) return unavailableBenchmark(t("No cash-flow records are available for the benchmark simulation"));
 
-    const loaded = await this.loadMarketSeries(account.currency, start, metrics.asOf);
+    const loaded = await this.loadMarketSeries("sp500", account.currency, start, metrics.asOf);
     const market = loaded.market;
     if (!market) {
       return unavailableBenchmark(loaded.warning ?? t("No local benchmark data is available; you can import a CSV in Settings"));
     }
-    return calculateSameCashFlowBenchmark(
+    const calculated = calculateSameCashFlowBenchmark(
       flows,
       metrics.asOf,
       metrics.currentValue,
@@ -526,6 +546,7 @@ export default class InvestmentTrackerPlugin extends Plugin {
       account.currency,
       market,
     );
+    return { ...calculated, marketPoints: market.points };
   }
 
   async loadAccountPerformanceBenchmark(
@@ -535,11 +556,11 @@ export default class InvestmentTrackerPlugin extends Plugin {
     performance: MonthlyPerformanceResult,
   ): Promise<PerformanceBenchmarkViewData> {
     const benchmark = await this.loadBenchmark(account, events, metrics);
-    if (benchmark.result.status !== "ok") return { performance, result: benchmark.result };
+    const annualReturns = calculateAccountAnnualReturns(account, events, todayLocal());
     const flows = events
       .filter(
         (event): event is CashFlowEvent =>
-          event.type === "cash-flow" && event.accountId === account.accountId,
+          event.type === "cash-flow" && event.accountId === account.accountId && event.currency === account.currency && (!metrics.asOf || event.effectiveDate <= metrics.asOf),
       )
       .map((event) => ({
         date: event.effectiveDate,
@@ -547,9 +568,38 @@ export default class InvestmentTrackerPlugin extends Plugin {
         amount: parseMoneyStrict(event.amount),
       }));
     return {
-      performance: applyBenchmarkToMonthlyPerformance(performance, benchmark.series, flows),
+      performance: benchmark.result.status === "ok" ? applyBenchmarkToMonthlyPerformance(performance, benchmark.series, flows) : performance,
       result: benchmark.result,
+      benchmarkAnnualReturns: calculateMarketAnnualReturns(annualReturns, { points: benchmark.marketPoints }),
+      comparisons: metrics.asOf ? await this.loadPerformanceComparisons(
+        account.currency, flows, metrics.asOf, metrics.currentValue, metrics.xirr, performance, annualReturns) : [],
     };
+  }
+
+  private async loadPerformanceComparisons(
+    currency: Currency,
+    flows: ExternalBenchmarkFlow[],
+    asOf: string,
+    actualValue: number,
+    actualXirr: number | null,
+    performance: MonthlyPerformanceResult,
+    annualReturns: AnnualReturnResult[],
+  ): Promise<PerformanceComparisonViewData[]> {
+    const start = [...flows].sort((a, b) => a.date.localeCompare(b.date))[0]?.date;
+    if (!start) return [];
+    return Promise.all(this.settings.chartComparisonIds.map(async (benchmarkId) => {
+      const loaded = await this.loadMarketSeries(benchmarkId, currency, start, asOf);
+      if (!loaded.market) return {
+        benchmarkId, performance, annualReturns: [],
+        result: unavailableBenchmark(loaded.warning ?? t("No local benchmark data is available; you can import a CSV in Settings"), t("Nasdaq-100"), benchmarkId).result,
+      };
+      const calculated = calculateSameCashFlowBenchmark(flows, asOf, actualValue, actualXirr, currency, loaded.market);
+      return {
+        benchmarkId, result: calculated.result,
+        performance: calculated.result.status === "ok" ? applyBenchmarkToMonthlyPerformance(performance, calculated.series, flows) : performance,
+        annualReturns: calculateMarketAnnualReturns(annualReturns, loaded.market),
+      };
+    }));
   }
 
   async loadPortfolioPerformanceBenchmark(
@@ -557,10 +607,12 @@ export default class InvestmentTrackerPlugin extends Plugin {
     currency: Currency,
     performance: MonthlyPerformanceResult,
   ): Promise<PerformanceBenchmarkViewData> {
-    const last = [...performance.rows].reverse().find((row) => row.closingValue !== null && row.valuationDate);
-    if (!last?.valuationDate || last.closingValue === null) {
-      const unavailable = unavailableBenchmark(t("At least one portfolio month-end valuation is required"));
-      return { performance, result: unavailable.result };
+    const noData = (message: string): PerformanceBenchmarkViewData => ({
+      performance, result: unavailableBenchmark(message).result, benchmarkAnnualReturns: [], comparisons: [],
+    });
+    const portfolio = calculatePortfolioMetrics(snapshot.accounts, snapshot.events, currency);
+    if (!portfolio.asOf) {
+      return noData(t("Portfolio comparisons require aligned valuation dates for all included accounts"));
     }
     const accountIds = new Set(
       snapshot.accounts
@@ -573,7 +625,7 @@ export default class InvestmentTrackerPlugin extends Plugin {
           event.type === "cash-flow" &&
           accountIds.has(event.accountId) &&
           event.currency === currency &&
-          event.effectiveDate <= last.valuationDate!,
+          event.effectiveDate <= portfolio.asOf!,
       )
       .map((event) => ({
         date: event.effectiveDate,
@@ -582,19 +634,18 @@ export default class InvestmentTrackerPlugin extends Plugin {
       }));
     const start = [...flows].sort((a, b) => a.date.localeCompare(b.date))[0]?.date;
     if (!start) {
-      const unavailable = unavailableBenchmark(t("No cash-flow records are available for the portfolio benchmark simulation"));
-      return { performance, result: unavailable.result };
+      return noData(t("No cash-flow records are available for the portfolio benchmark simulation"));
     }
-    const loaded = await this.loadMarketSeries(currency, start, last.valuationDate);
+    const annualReturns = calculatePortfolioAnnualReturns(snapshot.accounts, snapshot.events, currency, todayLocal());
+    const comparisons = await this.loadPerformanceComparisons(currency, flows, portfolio.asOf, portfolio.currentValue, portfolio.xirr, performance, annualReturns);
+    const loaded = await this.loadMarketSeries("sp500", currency, start, portfolio.asOf);
     if (!loaded.market) {
-      const unavailable = unavailableBenchmark(loaded.warning ?? t("No local benchmark data is available; you can import a CSV in Settings"));
-      return { performance, result: unavailable.result };
+      return { ...noData(loaded.warning ?? t("No local benchmark data is available; you can import a CSV in Settings")), comparisons };
     }
-    const portfolio = calculatePortfolioMetrics(snapshot.accounts, snapshot.events, currency);
     const benchmark = calculateSameCashFlowBenchmark(
       flows,
-      last.valuationDate,
-      last.closingValue,
+      portfolio.asOf,
+      portfolio.currentValue,
       portfolio.xirr,
       currency,
       loaded.market,
@@ -604,6 +655,8 @@ export default class InvestmentTrackerPlugin extends Plugin {
         ? applyBenchmarkToMonthlyPerformance(performance, benchmark.series, flows)
         : performance,
       result: benchmark.result,
+      benchmarkAnnualReturns: calculateMarketAnnualReturns(annualReturns, loaded.market),
+      comparisons,
     };
   }
 
@@ -634,7 +687,7 @@ export default class InvestmentTrackerPlugin extends Plugin {
 
   async importMarketCsv(payload: string): Promise<number> {
     const market = parseManualMarketCsv(payload, this.settings.baseCurrency);
-    const cache = new MarketCacheStore(this.app.vault, this.store.getMarketCachePath(this.settings.baseCurrency));
+    const cache = new MarketCacheStore(this.app.vault, this.store.getMarketCachePath("sp500", this.settings.baseCurrency));
     await this.store.initialize();
     await cache.save(market);
     return market.points.length;

@@ -6,6 +6,8 @@ export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 export type LanguageSetting = "auto" | SupportedLocale;
 
 export type BenchmarkId = "sp500" | "none";
+export type ChartComparisonId = "nasdaq100";
+export type MarketBenchmarkId = "sp500" | ChartComparisonId;
 export type AutoLockMinutes = 0 | 1 | 5 | 15 | 30;
 export type LedgerSecurityState = "setup-required" | "locked" | "unlocked";
 
@@ -15,6 +17,7 @@ export interface PluginSettings {
   language: LanguageSetting;
   benchmarkId: BenchmarkId;
   marketMode: "automatic" | "manual";
+  chartComparisonIds: ChartComparisonId[];
   lockOnLeave: boolean;
   autoLockMinutes: AutoLockMinutes;
   schemaVersion: number;
@@ -26,9 +29,10 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   language: "auto",
   benchmarkId: "sp500",
   marketMode: "automatic",
+  chartComparisonIds: ["nasdaq100"],
   lockOnLeave: true,
   autoLockMinutes: 5,
-  schemaVersion: 4,
+  schemaVersion: 5,
 };
 
 interface LedgerEventBase {
@@ -132,6 +136,13 @@ export interface AnnualReturnResult {
   details: string[];
 }
 
+export interface BenchmarkAnnualReturn {
+  year: number;
+  rate: number | null;
+  startDate: string;
+  endDate: string;
+}
+
 export type MonthlyPerformanceStatus = "complete" | "partial" | "mtd" | "missing";
 
 export interface MonthlyPerformanceRow {
@@ -167,7 +178,7 @@ export interface MarketPoint {
 
 export interface BenchmarkResult {
   status: "ok" | "unavailable";
-  benchmarkId: BenchmarkId;
+  benchmarkId: MarketBenchmarkId;
   asOf: string | null;
   virtualValue: number | null;
   xirr: number | null;

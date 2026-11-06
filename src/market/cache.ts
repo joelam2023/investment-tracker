@@ -1,6 +1,6 @@
 import { TFile, normalizePath } from "obsidian";
 import type { Vault } from "obsidian";
-import type { Currency, MarketPoint } from "../types";
+import type { Currency, MarketBenchmarkId, MarketPoint } from "../types";
 import { SUPPORTED_CURRENCIES } from "../types";
 import type { MarketSeries } from "./benchmark";
 import { fredMarketMetadata } from "./fred-provider";
@@ -17,7 +17,11 @@ function isStrictDate(value: string): boolean {
 }
 
 function validateMarketSeries(value: unknown): MarketSeries {
-  if (!isRecord(value) || value.schemaVersion !== 1) throw new Error(t("Invalid market cache version"));
+  if (!isRecord(value) || (value.schemaVersion !== 1 && value.schemaVersion !== 2)) throw new Error(t("Invalid market cache version"));
+  let benchmarkId: MarketBenchmarkId;
+  if (value.schemaVersion === 1) benchmarkId = "sp500";
+  else if (value.benchmarkId === "sp500" || value.benchmarkId === "nasdaq100") benchmarkId = value.benchmarkId;
+  else throw new Error(t("Invalid market data source"));
   if (typeof value.currency !== "string" || !(SUPPORTED_CURRENCIES as readonly string[]).includes(value.currency)) {
     throw new Error(t("Invalid market currency"));
   }
@@ -43,6 +47,7 @@ function validateMarketSeries(value: unknown): MarketSeries {
   }
   if (value.origin !== "automatic" && value.origin !== "manual") throw new Error(t("Invalid market source type"));
   return {
+    benchmarkId,
     currency: value.currency as Currency,
     points: points.sort((a, b) => a.date.localeCompare(b.date)),
     sourceLabel: value.sourceLabel,
@@ -53,7 +58,7 @@ function validateMarketSeries(value: unknown): MarketSeries {
 }
 
 function localizedMetadata(series: MarketSeries): MarketSeries {
-  if (series.origin === "automatic") return { ...series, ...fredMarketMetadata(series.currency) };
+  if (series.origin === "automatic") return { ...series, ...fredMarketMetadata(series.currency, series.benchmarkId) };
   return {
     ...series,
     sourceLabel: t("Manually imported S&P 500 benchmark · {currency}", { currency: series.currency }),
@@ -80,6 +85,7 @@ export function parseManualMarketCsv(text: string, currency: Currency): MarketSe
   }
   const deduplicated = new Map(points.map((point) => [point.date, point]));
   return {
+    benchmarkId: "sp500",
     currency,
     points: [...deduplicated.values()].sort((a, b) => a.date.localeCompare(b.date)),
     sourceLabel: t("Manually imported S&P 500 benchmark · {currency}", { currency }),
@@ -93,6 +99,7 @@ export function mergeCompatibleMarketSeries(prior: MarketSeries | null, next: Ma
   if (
     !prior ||
     prior.currency !== next.currency ||
+    prior.benchmarkId !== next.benchmarkId ||
     prior.origin !== next.origin
   ) {
     return next;
@@ -111,7 +118,7 @@ export class MarketCacheStore {
     private readonly path: string,
   ) {}
 
-  async load(expectedCurrency?: Currency): Promise<MarketSeries | null> {
+  async load(expectedCurrency?: Currency, expectedBenchmarkId?: MarketBenchmarkId): Promise<MarketSeries | null> {
     const file = this.vault.getAbstractFileByPath(normalizePath(this.path));
     if (!(file instanceof TFile)) return null;
     const series = validateMarketSeries(JSON.parse(await this.vault.cachedRead(file)) as unknown);
@@ -121,15 +128,16 @@ export class MarketCacheStore {
         expectedCurrency,
       }));
     }
+    if (expectedBenchmarkId && series.benchmarkId !== expectedBenchmarkId) throw new Error(t("Invalid market data source"));
     return localizedMetadata(series);
   }
 
   async save(series: MarketSeries): Promise<void> {
-    let validated = validateMarketSeries({ schemaVersion: 1, ...series });
+    let validated = validateMarketSeries({ schemaVersion: 2, ...series });
     const path = normalizePath(this.path);
-    const prior = await this.load(series.currency);
+    const prior = await this.load(series.currency, series.benchmarkId);
     validated = mergeCompatibleMarketSeries(prior, validated);
-    const content = JSON.stringify({ schemaVersion: 1, ...validated }, null, 2);
+    const content = JSON.stringify({ schemaVersion: 2, ...validated }, null, 2);
     const existing = this.vault.getAbstractFileByPath(path);
     if (existing instanceof TFile) {
       await this.vault.process(existing, () => content);

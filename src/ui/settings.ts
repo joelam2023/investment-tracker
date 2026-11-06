@@ -197,6 +197,16 @@ export class InvestmentTrackerSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName(t("Compare charts with Nasdaq-100"))
+      .setDesc(t("Adds Nasdaq-100 as a chart-only comparison. Automatic mode refreshes it from FRED; S&P 500 remains the primary benchmark for tables and excess returns."))
+      .addToggle((toggle) => toggle.setValue(this.controller.settings.chartComparisonIds.includes("nasdaq100"))
+        .onChange(async (enabled) => {
+          this.controller.settings.chartComparisonIds = enabled ? ["nasdaq100"] : [];
+          await this.controller.saveSettings();
+          await this.controller.refreshViews();
+        }));
+
+    new Setting(containerEl)
       .setName(t("Ledger location"))
       .setDesc(this.controller.settings.dataPath)
       .addButton((button) => button.setButtonText(t("Fixed path")).setDisabled(true));

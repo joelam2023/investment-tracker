@@ -1,6 +1,6 @@
 import { requestUrl } from "obsidian";
 import { t } from "../i18n";
-import type { Currency, MarketPoint } from "../types";
+import type { Currency, MarketBenchmarkId, MarketPoint } from "../types";
 import type { MarketSeries } from "./benchmark";
 
 export type FredQuoteDirection = "identity" | "multiply" | "divide";
@@ -90,12 +90,15 @@ export function parseFredCsv(text: string): MarketPoint[] {
   return points.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function fredMarketMetadata(currency: Currency): Pick<MarketSeries, "sourceLabel" | "warnings"> {
+export function fredMarketMetadata(currency: Currency, benchmarkId: MarketBenchmarkId = "sp500"): Pick<MarketSeries, "sourceLabel" | "warnings"> {
   const config = FRED_CURRENCY_CONFIG[currency];
-  const warnings = [
+  const warnings = benchmarkId === "sp500" ? [
     t(
       "The FRED SP500 series is a price index that excludes dividends, and its daily history usually covers only the most recent 10 years. Import your own CSV data for a total-return benchmark.",
     ),
+  ] : [
+    t("The FRED NASDAQ100 series is a price index that excludes dividends."),
+    t("Nasdaq-100 data is copyrighted by Nasdaq, Inc. and is enabled for personal, non-commercial use. Other uses require permission from the data owner."),
   ];
   let conversionLabel = "USD";
   if (config.quoteDirection !== "identity") {
@@ -104,14 +107,16 @@ export function fredMarketMetadata(currency: Currency): Pick<MarketSeries, "sour
       ? t("{currency} per USD", { currency })
       : t("USD per {currency}", { currency });
     warnings.push(
-      t(
+      benchmarkId === "sp500" ? t(
         "Exchange rates use FRED {seriesId} ({quote}, Federal Reserve H.10 New York noon buying rate); timing may differ from the S&P 500 close.",
         { seriesId: config.seriesId, quote },
-      ),
+      ) : t("Exchange rates use FRED {seriesId} ({quote}, Federal Reserve H.10 New York noon buying rate); timing may differ from the Nasdaq-100 close.", { seriesId: config.seriesId, quote }),
     );
   }
   return {
-    sourceLabel: t("S&P 500 Price Index · FRED · {conversionLabel}", { conversionLabel }),
+    sourceLabel: benchmarkId === "sp500"
+      ? t("S&P 500 Price Index · FRED · {conversionLabel}", { conversionLabel })
+      : t("Nasdaq-100 Price Index · FRED · {conversionLabel}", { conversionLabel }),
     warnings,
   };
 }
@@ -136,15 +141,17 @@ async function fetchFred(seriesId: string, start: string, end: string): Promise<
   return parseFredCsv(response.text);
 }
 
-export class FredSp500Provider {
-  async fetch(currency: Currency, start: string, end: string): Promise<MarketSeries> {
+export const FRED_BENCHMARKS = { sp500: { seriesId: "SP500" }, nasdaq100: { seriesId: "NASDAQ100" } } as const;
+
+export class FredBenchmarkProvider {
+  async fetch(benchmarkId: MarketBenchmarkId, currency: Currency, start: string, end: string): Promise<MarketSeries> {
     const paddedStart = addDays(start, -10);
-    const sp500 = await fetchFred("SP500", paddedStart, end);
+    const sp500 = await fetchFred(FRED_BENCHMARKS[benchmarkId].seriesId, paddedStart, end);
     const config = FRED_CURRENCY_CONFIG[currency];
     let points: MarketPoint[];
-    const metadata = fredMarketMetadata(currency);
+    const metadata = fredMarketMetadata(currency, benchmarkId);
     if (config.quoteDirection === "identity") {
-      points = sp500.filter((point) => point.date >= start);
+      points = sp500;
     } else {
       const fx = await fetchFred(config.seriesId, paddedStart, end);
       points = sp500
@@ -154,12 +161,15 @@ export class FredSp500Provider {
           const close = convertUsdPriceToCurrency(point.close, fxPoint.close, config.quoteDirection);
           return close === null ? null : { date: point.date, close };
         })
-        .filter((point): point is MarketPoint => point !== null && point.date >= start);
+        .filter((point): point is MarketPoint => point !== null);
     }
     if (points.length === 0) {
-      throw new Error(t("No S&P 500 or historical exchange-rate data covers the requested dates."));
+      throw new Error(benchmarkId === "sp500"
+        ? t("No S&P 500 or historical exchange-rate data covers the requested dates.")
+        : t("No Nasdaq-100 or historical exchange-rate data covers the requested dates."));
     }
     return {
+      benchmarkId,
       currency,
       points,
       sourceLabel: metadata.sourceLabel,

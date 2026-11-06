@@ -35,7 +35,7 @@ test("new installs use the privacy-first automatic lock defaults", () => {
   const settings = parseSettings(undefined);
   assert.equal(settings.lockOnLeave, true);
   assert.equal(settings.autoLockMinutes, 5);
-  assert.equal(settings.schemaVersion, 4);
+  assert.equal(settings.schemaVersion, 5);
 });
 
 test("existing automatic lock settings migrate without changing their behavior", () => {
@@ -43,7 +43,7 @@ test("existing automatic lock settings migrate without changing their behavior",
     const settings = parseSettings({ schemaVersion: 3, autoLockMinutes });
     assert.equal(settings.lockOnLeave, true);
     assert.equal(settings.autoLockMinutes, autoLockMinutes);
-    assert.equal(settings.schemaVersion, 4);
+    assert.equal(settings.schemaVersion, 5);
   }
 });
 
@@ -63,4 +63,10 @@ test("settings parsing never leaves both automatic lock rules disabled", () => {
   const settings = parseSettings({ lockOnLeave: false, autoLockMinutes: 0 });
   assert.equal(settings.lockOnLeave, true);
   assert.equal(settings.autoLockMinutes, 0);
+});
+
+test("Nasdaq chart preference preserves opt-out and ignores unsupported ids", () => {
+  assert.deepEqual(parseSettings(undefined).chartComparisonIds, ["nasdaq100"]);
+  assert.deepEqual(parseSettings({ chartComparisonIds: [] }).chartComparisonIds, []);
+  assert.deepEqual(parseSettings({ chartComparisonIds: ["sp500", "nasdaq100", "nasdaq100", "other"] }).chartComparisonIds, ["nasdaq100"]);
 });
