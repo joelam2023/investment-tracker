@@ -31,40 +31,6 @@ class Element {
   querySelector(_selector: string) { return this.all().find(node => node.attrs["data-year-filter"]); }
   focus() {}
 }
-function setup(missing = false) {
-  setLanguageSetting("en");
-  const account = { accountId: "synthetic", name: "Synthetic", currency: "USD", benchmarkId: "sp500", openedOn: "2023-08-01", archived: false };
-  const event = (date: string, amount: string, type: string) => ({ schemaVersion: 1, eventId: date, recordedAt: date, effectiveDate: date, accountId: account.accountId, currency: "USD", type, ...(type === "valuation" ? { totalValue: amount } : { amount, direction: "contribution" }) });
-  const events = [event("2023-08-01", "100", "cash-flow"), ...(!missing ? [event("2024-01-01", "150", "valuation")] : []), event("2024-12-31", "160", "valuation"), event("2025-12-31", "180", "valuation"), event("2026-05-31", "190", "valuation")];
-  let loads = 0;
-  const pending: ((value: any) => void)[] = [];
-  const controller: any = { settings: DEFAULT_SETTINGS, loadLinkedMarkets: () => { loads++; return new Promise(r => { pending.push(r); }); } };
-  const view: any = new InvestmentTrackerView({} as any, controller);
-  view.financialValuesVisible = true;
-  const root = new Element();
-  const render = () => view.renderPerformanceCenter(root, { currency: "USD", rows: [], warnings: [] }, { accounts: [account], events, warnings: [] }, account, "Synthetic", [], [], []);
-  render();
-  const toggle = () => root.all().find(node => node.attrs["data-year-filter"])!.handlers.click!();
-  return { root, view, render, toggle, loads: () => loads, finish: () => pending[0]?.({}) };
-}
-
-test("year filter toggles linked returns and accepts a January 1 boundary", async () => {
-  const { root, toggle, loads, finish } = setup();
-  assert.ok(root.all().some(n => n.text === "Linked annualized return"));
-  assert.equal(loads(), 1);
-  assert.equal(root.querySelector("")!.attrs["aria-pressed"], "false");
-  toggle();
-  assert.equal(loads(), 2);
-  assert.equal(root.querySelector("")!.attrs["aria-pressed"], "true");
-  assert.ok(root.querySelector("")!.cls.includes("investment-tracker-performance-option"));
-  assert.ok(root.all().some(n => n.text === "Excluded years: 2023, 2026"));
-  assert.ok(root.all().some(n => n.text === "My annualized return"));
-  finish(); await Promise.resolve();
-  toggle();
-  assert.equal(root.querySelector("")!.attrs["aria-pressed"], "false");
-  assert.ok(root.all().some(n => n.text === "Linked annualized return"));
-});
-
 test("yearly chart and table render the same three return series and respect Nasdaq opt-out", () => {
   setLanguageSetting("en");
   const original = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -109,23 +75,46 @@ test("yearly chart and table render the same three return series and respect Nas
   }
 });
 
-test("estimated boundaries show source dates and retain valid returns and comparisons", () => {
-  const { root, toggle, loads } = setup(true);
-  toggle();
-  assert.equal(loads(), 2);
-  assert.ok(root.all().some(n => n.text.includes("Estimated boundary 2023-12-31: carried from 2023-08-01")));
-  assert.ok(root.all().some(n => n.text === "+12.50%"));
-  assert.ok(!root.all().some(n => n.text.startsWith("Some selected periods are unavailable")));
+function marketLoaderView() {
+  const pending: Array<{ markets: (value: any) => void; benchmark: (value: any) => void }> = [];
+  const controller: any = {
+    settings: DEFAULT_SETTINGS,
+    loadLinkedMarkets: () => new Promise((resolve) => { pending.push({ markets: resolve, benchmark: () => {} }); }),
+  };
+  const view: any = new InvestmentTrackerView({} as any, controller);
+  let redraws = 0;
+  view.renderPreservingScroll = () => { redraws++; };
+  view.financialValuesVisible = true;
+  view.selectedAccountId = "synthetic";
+  const snapshot = { accounts: [], events: [], warnings: [] };
+  let finishBenchmark: (value: any) => void = () => {};
+  const load = () => view.ensureMarketData("account:synthetic", snapshot, "USD", { start: "2025-12-31", end: "2026-10-31" },
+    () => new Promise((resolve) => { finishBenchmark = resolve; }), () => view.selectedAccountId === "synthetic");
+  return { view, load, pending, finishBenchmark: (value: any) => finishBenchmark(value), redraws: () => redraws };
+}
+
+test("index data arriving after values are hidden or the page changes does not redraw figures", async () => {
+  for (const change of ["mask", "leave"] as const) {
+    const { view, load, pending, finishBenchmark, redraws } = marketLoaderView();
+    const cache = load();
+    if (change === "mask") view.financialValuesVisible = false;
+    else view.selectedAccountId = null;
+    pending[0]!.markets({});
+    finishBenchmark({});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(redraws(), 0);
+    assert.equal(cache.marketsDone, true);
+  }
 });
 
-test("late benchmark responses cannot reveal figures after masking or replace a different report", async () => {
-  for (const hide of [true, false]) {
-    const { root, view, render, toggle, finish } = setup();
-    toggle();
-    if (hide) { view.financialValuesVisible = false; render(); } else toggle();
-    const before = root.all().map(n => n.text).join("\n");
-    finish(); await Promise.resolve();
-    assert.equal(root.all().map(n => n.text).join("\n"), before);
-    if (hide) assert.equal(root.all().filter(n => n.cls === "investment-tracker-metric-value").length, 0);
-  }
+test("index data is loaded once per page and redraws that page when it arrives", async () => {
+  const { load, pending, finishBenchmark, redraws } = marketLoaderView();
+  const first = load();
+  assert.equal(load(), first);
+  assert.equal(pending.length, 1);
+  pending[0]!.markets({});
+  finishBenchmark({});
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(redraws(), 2);
+  assert.equal(first.benchmarkDone, true);
 });

@@ -1436,3 +1436,35 @@
 .investment-tracker-stale-notice-head .investment-tracker-stale-icon { color: var(--color-orange); margin-top: 2px; }
 .investment-tracker-stale-notice > div:not(:first-child) { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .investment-tracker-stale-notice-button { align-self: flex-start; margin-top: 6px; }
+
+/* Account page: back link in the toolbar, then the account name above the same hero as home. */
+.investment-tracker-back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  margin-left: -6px;
+  padding: 0 10px 0 4px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+.investment-tracker-back-button:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+.investment-tracker-back-button svg { width: 16px; height: 16px; }
+.investment-tracker-account-heading { margin-top: -18px; }
+.investment-tracker-account-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.investment-tracker-account-heading .investment-tracker-account-meta { margin-top: 4px; }
+@media (max-width: 420px) {
+  .investment-tracker-shell.is-account .investment-tracker-home-asof { flex-basis: auto; }
+  .investment-tracker-account-title { font-size: 21px; }
+}

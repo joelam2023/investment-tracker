@@ -1,6 +1,6 @@
 import { setIcon } from "obsidian";
 import type { AccountState, Currency, LedgerEvent } from "../types";
-import { calculateLinkedReport, type LinkedReport } from "../domain/linked-return";
+import type { LinkedReport } from "../domain/linked-return";
 import { annualMoneyWeightedIndex } from "../market/annual-money-weighted";
 import type { LinkedMarkets } from "./linked-return";
 import { getIntlLocale, t } from "../i18n";
@@ -91,18 +91,6 @@ export function daysBetween(earlier: string, later: string): number {
   return Math.round((Date.parse(`${later}T00:00:00Z`) - Date.parse(`${earlier}T00:00:00Z`)) / DAY_MS);
 }
 
-/** This year's comparison for one account, with the same index method as the portfolio. */
-export function accountYearComparison(
-  accounts: AccountState[],
-  events: LedgerEvent[],
-  account: AccountState,
-  markets: LinkedMarkets,
-  today: string,
-): YearComparison | null {
-  const report = calculateLinkedReport(accounts, events, account.currency, today, account);
-  return currentYearComparison(compareYears(report, markets), Number(today.slice(0, 4)));
-}
-
 /** Date range that covers every report, so one market download serves all rows. */
 export function marketRange(reports: LinkedReport[]): { start: string; end: string } | null {
   const dates = reports.flatMap((report) => report.years.flatMap((row) => [row.start, row.end])).filter((date): date is string => !!date).sort();
@@ -168,6 +156,8 @@ function isYearBoundary(date: string | null, year: number): boolean {
 }
 
 export interface HeroInput {
+  /** "account" when the page shows one account instead of the whole portfolio. */
+  scope?: "portfolio" | "account";
   year: number;
   row: YearComparison | null;
   currency: Currency;
@@ -200,7 +190,9 @@ export function renderHero(parent: HTMLElement, input: HeroInput): void {
     main.createDiv({ cls: "investment-tracker-hero-rate is-empty", text: "—" });
     main.createDiv({
       cls: "investment-tracker-hero-note",
-      text: row ? t("This year's return needs a valuation for every account on the same day.") : t("No valuation has been recorded this year yet."),
+      text: !row ? t("No valuation has been recorded this year yet.")
+        : input.scope === "account" ? t("This year's return needs a valuation at the start of the year and a later one.")
+        : t("This year's return needs a valuation for every account on the same day."),
     });
   } else {
     main.createDiv({ cls: `investment-tracker-hero-rate${toneClass(row.mine, visible)}`, text: rateText(row.mine, visible) });
@@ -215,7 +207,7 @@ export function renderHero(parent: HTMLElement, input: HeroInput): void {
   }
 
   const side = hero.createDiv({ cls: "investment-tracker-hero-side" });
-  side.createDiv({ cls: "investment-tracker-hero-label", text: t("Total assets") });
+  side.createDiv({ cls: "investment-tracker-hero-label", text: input.scope === "account" ? t("Current assets") : t("Total assets") });
   side.createDiv({ cls: "investment-tracker-hero-total", text: visible ? formatMoney(input.totalValue, input.currency) : HIDDEN_FINANCIAL_VALUE });
   const stats = side.createDiv({ cls: "investment-tracker-hero-stats" });
   const stat = (label: string, value: number | null, signed: boolean) => {
@@ -251,7 +243,7 @@ function renderStaleNotice(parent: HTMLElement, end: string, days: number, input
 
 function renderComparisonBars(parent: HTMLElement, row: YearComparison, input: HeroInput): void {
   const series: Array<{ label: string; value: number | null; cls: string }> = [
-    { label: t("My portfolio"), value: row.mine, cls: "is-actual" },
+    { label: input.scope === "account" ? t("This account") : t("My portfolio"), value: row.mine, cls: "is-actual" },
     { label: t("S&P 500"), value: row.sp500, cls: "is-benchmark" },
     ...(input.includeNasdaq ? [{ label: t("Nasdaq-100"), value: row.nasdaq100, cls: "is-comparison" }] : []),
   ];
